@@ -1,10 +1,16 @@
 {
+        "tz": "Europe/Paris",
+        "title": {
+                "text": "FILEBROWSER",
+                "url": "https://www.google.com",
+                "image": "images/mypic.png"
+        },
         "bookmarks": {
                 "enabled": 1,
                 "max": 15
         },
         "ldap": {
-                "server": "xxxxxxx",
+                "server": "your.ldap.server",
                 "port": 389,
                 "pattern": "cn={login},ou=DAP,ou=DOP,dc=xxxx,dc=xxxx",
                 "protocol_version": 3
@@ -21,16 +27,17 @@
                 {
                 "name": "/tmp",
                 "path": "/tmp",
-                "download": 1,
-                "delete": 1,
-                "upload": 1
+                "download": "yes",
+                "delete": "yes",
+                "upload": "yes",
+                "showhiddenfiles": "yes"
                 },
                 {
                 "name": "Home",
                 "path": "/home",
-                "download": 1,
-                "delete": 0,
-                "upload": 0,
+                "download": "yes",
+                "delete": "no",
+                "upload": "no",
                 "encoding": "iso-8859-1"
                 }
         ],
