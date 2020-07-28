@@ -16,5 +16,7 @@ Features :
 * bookmark favorite directories (stored locally on browser cookie)
 
 Uses bootstrap 4.5 and jquery 3.2.1
+
 Built on PHP 7.3 on Linux
+
 Other configurations not tested.
