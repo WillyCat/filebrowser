@@ -9,6 +9,7 @@
                 "enabled": 1,
                 "max": 15
         },
+        "auth": "ldap",
         "ldap": {
                 "server": "your.ldap.server",
                 "port": 389,
