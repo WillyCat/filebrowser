@@ -19,7 +19,7 @@ set_orderby();
 //----------------------------------
 // Read configuration file
 //----------------------------------
-$conf_content = @file_get_contents ('/etc/filebrowser/conf');
+$conf_content = @file_get_contents ('/etc/filebrowser/conf.json');
 if ($conf_content === false)
 	global_failure ('Cannot read configuration file');
 
@@ -1513,6 +1513,7 @@ send_html_head();
                 </a>
               </li>
 <?php
+		} // is_dir
 	}
 ?>
 <?php

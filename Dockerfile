@@ -7,4 +7,4 @@ RUN \
     docker-php-ext-install ldap
 COPY src/ /var/www/html/
 RUN mkdir /etc/filebrowser
-COPY conf/conf /etc/filebrowser/conf
+COPY conf.json /etc/filebrowser/conf.json
