@@ -5,6 +5,6 @@ RUN \
     rm -rf /var/lib/apt/lists/* && \
     docker-php-ext-configure ldap --with-libdir=lib/x86_64-linux-gnu/ && \
     docker-php-ext-install ldap
-COPY src/ /var/www/html/
+COPY index.php /var/www/html/
 RUN mkdir /etc/filebrowser
 COPY conf.json /etc/filebrowser/conf.json
