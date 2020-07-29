@@ -6,7 +6,7 @@
                 "image": ""
         },
         "bookmarks": {
-                "enabled": 1,
+                "enabled": "yes",
                 "max": 15
         },
         "auth": "ldap",
@@ -21,7 +21,7 @@
                 "pagesize": 15
         },
         "csv": {
-                "enabled": 1,
+                "enabled": "yes",
                 "columns": [ "Filename", "Size", "mtime", "ctime", "type" ]
         },
         "volumes": [
