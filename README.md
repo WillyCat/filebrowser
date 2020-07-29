@@ -1,9 +1,19 @@
 # filebrowser
 
-A very simple file browser easy to deploy
+A very simple file browser with minimal but essential features
 
-Native deployment: drop the file in a web server, edit configuration file (/etc/filebrowser/conf) and you're done !
-Docker: use make.sh to create a docker image, edit run.sh to map your volumes, edit configuration file (conf/conf), run.sh and you're done !
+Native deployment
+1- drop the PHP file in a PHP-enabled web server,
+2- drop conf file to /etc/filebrowser/conf
+3- edit configuration file
+you're done !
+
+Docker deployment :
+1- run make.sh to create a docker image,
+2- edit run.sh to map your volumes, ports etc.
+3- drop conf file to conf directory (conf/conf)
+4- edit configuration file
+5- run.sh to start container
 
 Features :
 * LDAP integration (optional),
@@ -15,6 +25,9 @@ Features :
 * configure different roots with different parameters,
 * configure timezone and charset,
 * bookmark favorite directories (stored locally on browser cookie)
+
+Notes :
+* LDAP requires PHP ldap_ functions, you might need to update your php configuration
 
 Uses bootstrap 4.5 and jquery 3.2.1
 
