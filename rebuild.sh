@@ -3,6 +3,6 @@
 cr=$?
 if [ ${cr} -eq 0 ]
 then
-        ./restart.sh
+        sh restart.sh
 fi
 exit 0
