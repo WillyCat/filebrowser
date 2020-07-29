@@ -1,0 +1,42 @@
+Date        Version  Changement
+----------  -------  -----------------------------------------------
+2020-07-24      0.1  Premiere version - partiel
+                     Authentification LDAP
+                     Multi-racines
+                     Pagination
+                     Suivi des liens symboliques
+                     Choix des colonnes parametrable
+                     Upload (beta)
+2020-07-27      0.2  Fichier de conf externe
+                     Pied de page avec infos diverses
+                     Affichage propre des messages d'erreur
+                     Export CSV du contenu du repertoire
+                     Transcodage UTF8
+                     Telechargement de fichier
+                     Limitation actions en dehors des racines configurees
+                     Bookmarks (stockes dans le cookie)
+2020-07-27      0.3  Upload files (RC)
+                     Delete (beta) - cinematique mais pas d'action
+                     download, upload, delete: config par racine
+                     (default is 0 (no) )
+                     Ajout htmlentities()
+2020-07-28      0.4  Ameliorations visuelles
+                     import de bootstrap.js, popper.js
+                     Bugfix sur pagination
+2020-07-28      0.5  Refonte pagination pour gerer les grands repertoires
+2020-07-28      0.6  Utilisation de CDN pour n'avoir qu'un fichier a deployer
+                     Refactoring / Commentaires
+                     Possibilite de trier sur les colonnes
+                     Amelioration du pied de page
+2020-07-28      0.7  Bugfix: authentification was broken
+2020-07-28      0.8  Bugfix: missing external css: no more external refs
+                     all is included in a single php file plus CDNs
+2020-07-28      0.9  Increase security with improved parms processing
+                     Bugfix: sort on size was broken
+2020-07-28     0.10  Improved display of general failure
+                     delete implemented (but commented out)
+                     Added timezone support
+2020-07-28     0.11  auth becomes optional (depends on "auth" parm)
+2020-07-29     0.12  minor changes to comply with docker image delivery
+                     Fix issue when directory is empty
+2020-07-29     0.13  new value for auth: 'none'
