@@ -2,8 +2,8 @@
         "tz": "Europe/Paris",
         "title": {
                 "text": "FILEBROWSER",
-                "url": "https://www.google.com",
-                "image": "images/mypic.png"
+                "url": "",
+                "image": ""
         },
         "bookmarks": {
                 "enabled": 1,
