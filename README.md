@@ -1,8 +1,9 @@
 # filebrowser
 
-A very simple file browser in a single PHP file
+A very simple file browser easy to deploy
 
-Drop the file in a web server, edit configuration file (/etc/filebrowser/conf) and you're done !
+Native deployment: drop the file in a web server, edit configuration file (/etc/filebrowser/conf) and you're done !
+Docker: use make.sh to create a docker image, edit run.sh to map your volumes, edit configuration file (conf/conf), run.sh and you're done !
 
 Features :
 * LDAP integration (optional),
