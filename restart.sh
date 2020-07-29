@@ -1,4 +1,4 @@
 #!/bin/bash
-./stop.sh
-./run.sh
+bash ./stop.sh
+bash ./run.sh
 exit 0
