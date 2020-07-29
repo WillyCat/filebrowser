@@ -66,17 +66,22 @@ if (array_key_exists ('action', $_GET) && $_GET['action'] == 'logout')
 
 if (!session_is_valid())
 {
-	// without a valid session, only two actions can be performed:
-	// - display login form
-	// - process login form
-
-	if (array_key_exists ('login', $_POST))
-		do_login();
-
-	if (!session_is_valid())
+	if ($conf['auth'] == 'none') // auto-login
+		$_SESSION['filebrowseruser'] = 'anonymous';
+	else // real login
 	{
-		show_login_form();
-		die();
+		// without a valid session, only two actions can be performed:
+		// - display login form
+		// - process login form
+
+		if (array_key_exists ('login', $_POST))
+			do_login();
+
+		if (!session_is_valid())
+		{
+			show_login_form();
+			die();
+		}
 	}
 }
 
@@ -84,7 +89,7 @@ if (!session_is_valid())
 // ADD/REMOVE BOOKMARK
 //==============================================================
 
-if ($conf['bookmarks']['enabled'] == '1')
+if ($conf['bookmarks']['enabled'] == 'yes')
 {
 	$bookmarks_cookie_name = 'bookmarks';
 	if (array_key_exists ($bookmarks_cookie_name, $_COOKIE))
@@ -233,7 +238,7 @@ if (array_key_exists ('action', $_GET) && $_GET['action'] == 'delete')
 if (array_key_exists ('action', $_GET) && $_GET['action'] == 'export')
 {
 	set_path();
-	if ($conf['csv']['enabled'] == '1' && is_dir_allowed ($path))
+	if ($conf['csv']['enabled'] == 'yes' && is_dir_allowed ($path))
 	{
 		$filename = basename ($path) . '.csv';
 		header('Content-Type: application/octet-stream');
@@ -294,7 +299,7 @@ set_orderby(): void
 function
 set_path(string $origin = 'GET')
 {
-	global $path, $file, $pathname;
+	global $path, $file, $pathname, $errmsg;
 
 	$path = $file = '';
 
@@ -307,6 +312,7 @@ set_path(string $origin = 'GET')
 		$from = $_POST;
 		break;
 	default :
+		$errmsg = 'Invalid origin';
 		return;
 	}
 
@@ -340,7 +346,13 @@ set_path(string $origin = 'GET')
 	}
 	else // no, path only
 	{
-		$path = realpath($path);
+		$path = realpath($path); // clears $path is does not exists
+	}
+
+	// realpath() return an empty string is directory does not exists
+	if ($path == '')
+	{
+		$errmsg = 'Cannot read directory'; // use same message for non-exitent and unreadable
 	}
 }
 
@@ -348,12 +360,17 @@ set_path(string $origin = 'GET')
 function
 set_pageno(): void
 {
-	global $pageno;
+	global $pageno, $nbpages;
 
 	if (array_key_exists ('page', $_GET))
 		$pageno = ($_GET['page'] - 1);
 	else
 		$pageno = 0;
+
+	if ($pageno < 0)
+		$pageno = 0;
+	if ($pageno >= $nbpages)
+		$pageno = $nbpages - 1;
 }
 
 // true if this field is a valid order criteria
@@ -502,7 +519,6 @@ send_html_head(): void
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="">
     <meta name="author" content="">
-    <link rel="icon" href="ico/darva.png">
 
     <title>File browsing</title>
 
@@ -515,6 +531,10 @@ send_html_head(): void
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
 
 <style>
+.invalid {
+	text-decoration: line-through;
+}
+
 .largepaginate {
     width: 200px;
     position: relative;
@@ -769,9 +789,55 @@ is_dir_allowed (string $path): bool
 	return false;
 }
 
-// reads $path
 function
 get_dir_content (): void
+{
+	global $errmsg, $conf, $path;
+	global $total_size_used;
+	global $files;
+
+	$files = [];
+	$total_size_used = 0;
+
+	parse_dir();
+
+	global $n;
+	$n = count ($files);
+
+	//-------------------
+	// paging computations
+	//-------------------
+
+	global $nbpages;
+	$nbpages = floor ($n / $conf['display']['pagesize']);
+	if ($n % $conf['display']['pagesize'])
+		$nbpages++;
+	if ($nbpages == 0)
+		$nbpages = 1; // even if no result, we need 1 page
+
+	//-------------------
+	// sort content
+	//-------------------
+
+	usort ($files, function ($a, $b) {
+		global $orderby, $order;
+
+
+		if ($orderby == 'size')
+			$cr = $a[$orderby] - $b[$orderby];
+		else
+			$cr = strcasecmp($a[$orderby], $b[$orderby]);
+
+		if ($order == 'desc')
+			$cr = -$cr;
+
+		return $cr;
+	});
+}
+
+// reads $path
+function
+parse_dir (): void
 {
 	global $errmsg, $conf, $path;
 
@@ -784,7 +850,7 @@ get_dir_content (): void
 
 	if ($path == '')
 	{
-		$errmsg = 'Directory does not exists or is unreadable';
+		$errmsg = 'Please select a valid directory';
 		return;
 	}
 
@@ -823,14 +889,9 @@ get_dir_content (): void
 	$dh = opendir ($path);
 	if (!$dh)
 	{
-		$errmsg = 'Cannot read directory';
+		$errmsg = 'Cannot read directory'; // use same message for non-exitent and unreadable
 		return;
 	}
-
-	global $files;
-	global $total_size_used;
-	$files = [];
-	$total_size_used = 0;
 
 	clearstatcache(); // force re-reading of content, resetting cache
 
@@ -886,53 +947,6 @@ get_dir_content (): void
 	}
 	closedir ($dh);
 
-	//-------------------
-	// some stats
-	//-------------------
-
-	global $n;
-	$n = count ($files);
-
-	//-------------------
-	// paging computations
-	//-------------------
-
-	global $conf;
-	global $nbpages;
-	$nbpages = floor ($n / $conf['display']['pagesize']);
-	if ($n % $conf['display']['pagesize'])
-		$nbpages++;
-
-	// if current page is out of range, bring it back
-	// this can occur for multiple reasons: directory has less files than previously
-	// (either because of a delete or external reason)
-	// change in url by user, incorrect page input etc. etc.
-
-	global $pageno;
-	if ($pageno < 0)
-		$pageno = 0;
-	if ($pageno >= $nbpages)
-		$pageno = $nbpages - 1;
-
-	//-------------------
-	// sort content
-	//-------------------
-
-//print_r ($files);
-	usort ($files, function ($a, $b) {
-		global $orderby, $order;
-
-
-		if ($orderby == 'size')
-			$cr = $a[$orderby] - $b[$orderby];
-		else
-			$cr = strcasecmp($a[$orderby], $b[$orderby]);
-
-		if ($order == 'desc')
-			$cr = -$cr;
-
-		return $cr;
-	});
 }
 
 //----------------------------------------------------------
@@ -971,7 +985,7 @@ show_login_form(): void
 	echo '
 <body class="text-center">
 	<form class="form-signin" data-bitwarden-watching="1" method="POST" action="index.php">
-      <img class="mb-4" src="images/darva.png" >';
+	';
 	global $info_msg, $info_level;
 	display_error ($info_msg, $info_level);
 	echo '
@@ -981,7 +995,7 @@ show_login_form(): void
       <label for="inputPassword" class="sr-only">Password</label>
       <input type="password" id="inputPassword" class="form-control" placeholder="Password" required="" name="password">
       <button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
-      <p class="mt-5 mb-3 text-muted">© 2020</p>
+      <p class="mt-5 mb-3 text-muted">(c) 2020</p>
     </form>
 </body>
 </html>';
@@ -1103,7 +1117,7 @@ display_column (array $file, string $column, array $root): void
 }
 
 function
-display_line (array $file, array $columns, array $root): void
+display_line (int $i, array $file, array $columns, array $root): void
 {
 	echo '<tr>';
 	foreach ($columns as $column)
@@ -1266,7 +1280,7 @@ upload_button (): string
 {
 	global $conf, $pageno;
 
-	if ($conf['csv']['enabled'] != '1')
+	if ($conf['csv']['enabled'] != 'yes')
 		return '';
 
 	$str  = '<span';
@@ -1287,7 +1301,7 @@ csv_button (): string
 {
 	global $conf, $pageno;
 
-	if ($conf['csv']['enabled'] != '1')
+	if ($conf['csv']['enabled'] != 'yes')
 		return '';
 
 	$str  = '<span';
@@ -1352,6 +1366,7 @@ display_files (): void
 	global $files;
 	global $pageno, $nbpages;
 	global $order, $orderby;
+
 	echo '<div>';
 	show_pagination ($pageno, $nbpages);
 	echo '</div>';
@@ -1418,7 +1433,7 @@ for ($lineno = 0, $i = ($pageno * $conf['display']['pagesize']); ($lineno < $con
 {
 	if ($files[$i]['type'] == 'file')
 		$page_size_used += $files[$i]['size'];
-	display_line ($files[$i], $columns, $root);
+	display_line ($i, $files[$i], $columns, $root);
 }
 ?>
               </tbody>
@@ -1451,11 +1466,12 @@ session_invalidate(): void
 // MAIN
 //==========================================================
 
+$debugstr = '';
 set_path();
-if ($path == '')
-	$path = $default_dir;
-set_pageno();
+//if ($path == '')
+	//$path = $default_dir;
 get_dir_content ();
+set_pageno();
 send_html_head();
 ?>
 
@@ -1466,7 +1482,7 @@ send_html_head();
 	if ($conf['title']['image'] != '')
 		echo '<img src="' . $conf['title']['image'] . '">';
 	else
-		echo $conf['title']['text'];
+		echo htmlentities($conf['title']['text']);
 ?>
 	</a>
 	<!--
@@ -1482,23 +1498,25 @@ send_html_head();
       <div class="row">
         <nav class="col-md-2 d-none d-md-block bg-light sidebar">
           <div class="sidebar-sticky">
+<?php echo $debugstr; ?>
             <ul class="nav flex-column">
 
 <?php
 	foreach ($conf['volumes'] as $volume)
 	{
+		if (is_dir($volume['path'])) {
 ?>
               <li class="nav-item">
                 <a class="nav-link active" href="<?= make_link (1,$volume['path']) ?>" title="<?=$volume['path'] ?>">
                   <span data-feather="folder"></span>
-                  <?=htmlentities($volume['name']) ?>
+                  <span class="" ><?=htmlentities($volume['name']) ?></span>
                 </a>
               </li>
 <?php
 	}
 ?>
 <?php
-	if ($conf['bookmarks']['enabled'] == '1')
+	if ($conf['bookmarks']['enabled'] == 'yes')
 		foreach ($bookmarks as $bookmark)
 		{
 ?>
@@ -1512,12 +1530,18 @@ send_html_head();
 		} // foreach
 ?>
 
+<?php
+if ($conf['auth'] == 'ldap') {
+?>
               <li class="nav-item ">
                 <a class="nav-link" href="?action=logout" title="Logout">
                   <span data-feather="log-out"></span>
                   Logout <?=$_SESSION['filebrowseruser'] ?>
                 </a>
               </li>
+<?php
+		} // auth
+?>
 
             </ul>
           </div>
@@ -1529,13 +1553,14 @@ send_html_head();
 	display_error($info_msg, $info_level);
 ?>
 
+<?php if ($path != '') { ?>
 	<div>
 	<ul class="breadcrumb">
 	<?php
 	$dirparts = explode ('/' , $path);
 	$linkpath = '';
 	echo '<li class="breadcrumb-item">';
-	if ($conf['bookmarks']['enabled'] == '1')
+	if ($conf['bookmarks']['enabled'] == 'yes')
 	{
 		echo '<A HREF="'.make_link($pageno+1,'','action=bookmark').'" title="Bookmark this directory">';
 		echo '<span';
@@ -1546,7 +1571,6 @@ send_html_head();
 		echo '</a>';
 	}
 	echo '</li>';
-	//echo '<li class="breadcrumb-item"></li>';
 	foreach ($dirparts as $dirlevel)
 	{
 		if ($dirlevel == '')
@@ -1559,6 +1583,7 @@ send_html_head();
 	</ul>
 	</div>
 	<div>
+<?php } // path != '' ?>
 <?php
 	if ($errmsg != '')
 		display_error ($errmsg);
