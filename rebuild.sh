@@ -1,5 +1,5 @@
 #!/bin/bash
-./make.sh
+sh make.sh
 cr=$?
 if [ ${cr} -eq 0 ]
 then
