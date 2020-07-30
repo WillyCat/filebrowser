@@ -40,3 +40,7 @@ Date        Version  Changement
 2020-07-29     0.12  minor changes to comply with docker image delivery
                      Fix issue when directory is empty
 2020-07-29     0.13  new value for auth: 'none'
+2020-07-30     0.14  reset session when changing conf file
+2020-07-30     0.15  fix "1/0" on footer when no file
+                     fix misc. bugs
+                     exported styles to filebrowser.css

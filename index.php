@@ -64,6 +64,11 @@ session_start();
 if (array_key_exists ('action', $_GET) && $_GET['action'] == 'logout')
 	session_invalidate();
 
+// if changing auth method to ldap, sessions already open
+// and gained with no auth are no longer valid
+if ($_SESSION['filebrowseruser'] == 'anonymous' && $conf['auth'] == 'ldap')
+	session_invalidate();
+
 if (!session_is_valid())
 {
 	if ($conf['auth'] == 'none') // auto-login
@@ -190,7 +195,7 @@ if (array_key_exists ('action', $_GET) && $_GET['action'] == 'confirm-delete')
 		$info_msg .= '&nbsp;';
 		//$info_msg .= '<button type="button" class="btn btn-danger" ><span data-feather="trash"></span>&nbsp;&nbsp;YES</button>';
 		$no_link = make_link ($pageno+1);
-		$no_link .= '&file=' . $file['name'];
+		$no_link .= '&file=' . $file;
 		$yes_link = $no_link . '&action=delete';
 		$info_msg .= '<a class="btn btn-primary" href="'.$yes_link.'" role="button">Yes</a>';
 		$info_msg .= '&nbsp;';
@@ -214,10 +219,9 @@ if (array_key_exists ('action', $_GET) && $_GET['action'] == 'delete')
 	}
 	else
 	{
-/*
 		if (@unlink($pathname))
 		{
-			$info_msg = 'File deleted';
+			$info_msg = 'File ' .$file. ' deleted';
 			$info_level = 'success';
 		}
 		else
@@ -225,10 +229,11 @@ if (array_key_exists ('action', $_GET) && $_GET['action'] == 'delete')
 			$info_msg = 'Deletion failed';
 			$info_level = 'danger';
 		}
-*/
 
+		/*
 		$info_msg = 'Deletion not implemented yet';
 		$info_level = 'warning';
+		*/
 	}
 }
 
@@ -529,164 +534,7 @@ send_html_head(): void
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
 <?php } ?>
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
-
-<style>
-.invalid {
-	text-decoration: line-through;
-}
-
-.largepaginate {
-    width: 200px;
-    position: relative;
-    float: right;
-}
-
-.bookmark {
-	text-overflow: ellipsis;
-	width: 200px;
-	overflow: hidden;
-}
-
-.icon {
-	display: none;
-	padding-right: 7px;
-	padding-left: 7px;
-}
-
-.clickable {
-	cursor: pointer;
-}
-
-.col-perms {
-    font-family: monospace;
-    font-size: initial;
-}
-
-.icon:hover {
-	background: lightgrey;
-}
-
-tr:hover .icon {
-	display: inline-block;
-	cursor: pointer;
-}
-
-.form-signin {
-    width: 100%;
-    max-width: 330px;
-    padding: 15px;
-    margin: auto;
-}
-
-.footer {
-    _position: absolute;
-    bottom: 0;
-    width: 100%;
-    height: 60px;
-    line-height: 60px;
-    background-color: #f5f5f5;
-}
-
-
-/* start of dashboard.css */
-/* Custom styles for this template */
-
-body {
-  font-size: .875rem;
-}
-
-.feather {
-  width: 16px;
-  height: 16px;
-  vertical-align: text-bottom;
-}
-
-/*
- * Sidebar
- */
-
-.sidebar {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 100; /* Behind the navbar */
-  padding: 0;
-  box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
-}
-
-.sidebar-sticky {
-  position: -webkit-sticky;
-  position: sticky;
-  top: 48px; /* Height of navbar */
-  height: calc(100vh - 48px);
-  padding-top: .5rem;
-  overflow-x: hidden;
-  overflow-y: auto; /* Scrollable contents if viewport is shorter than content. */
-}
-
-.sidebar .nav-link {
-  font-weight: 500;
-  color: #333;
-}
-
-.sidebar .nav-link .feather {
-  margin-right: 4px;
-  color: #999;
-}
-
-.sidebar .nav-link.active {
-  color: #007bff;
-}
-
-.sidebar .nav-link:hover .feather,
-.sidebar .nav-link.active .feather {
-  color: inherit;
-}
-
-.sidebar-heading {
-  font-size: .75rem;
-  text-transform: uppercase;
-}
-
-/*
- * Navbar
- */
-
-.navbar-brand {
-  padding-top: .75rem;
-  padding-bottom: .75rem;
-  font-size: 1rem;
-  background-color: rgba(0, 0, 0, .25);
-  box-shadow: inset -1px 0 0 rgba(0, 0, 0, .25);
-}
-
-.navbar .form-control {
-  padding: .75rem 1rem;
-  border-width: 0;
-  border-radius: 0;
-}
-
-.form-control-dark {
-  color: #fff;
-  background-color: rgba(255, 255, 255, .1);
-  border-color: rgba(255, 255, 255, .1);
-}
-
-.form-control-dark:focus {
-  border-color: transparent;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, .25);
-}
-
-/*
- * Utilities
- */
-
-.border-top { border-top: 1px solid #e5e5e5; }
-.border-bottom { border-bottom: 1px solid #e5e5e5; }
-
-/* end of dashboard.css */
-</style>
+<link rel="stylesheet" href="filebrowser.css">
 
   </head>
 ';
@@ -839,7 +687,7 @@ get_dir_content (): void
 function
 parse_dir (): void
 {
-	global $errmsg, $conf, $path;
+	global $errmsg, $conf, $path, $files;
 
 	//-------------------
 	// Determines real pathname
@@ -898,6 +746,7 @@ parse_dir (): void
 	$i = 0;
 	while (($file = readdir ($dh)) !== false)
 	{
+//echo "FILE=" . $file . '<br>';
 		if ($file == '.' || $file == '..')
 			continue;
 
@@ -946,7 +795,6 @@ parse_dir (): void
 		$files[$i++] = $a;
 	}
 	closedir ($dh);
-
 }
 
 //----------------------------------------------------------
@@ -1007,7 +855,7 @@ display_action(string $action, array $file, array $root): void
 	$feather = $action_link = '';
 
 	if (array_key_exists ($action, $root)
-	&& $root[$action] == '0')
+	&& $root[$action] == 'no')
 		return;
 
 	switch ($action)
@@ -1325,7 +1173,7 @@ display_error (string $msg, string $level = 'danger'): void
 		return;
 ?>
 	<div class="alert alert-<?=$level ?>" role="alert">
-	  <?=$msg ?>
+	  <?=htmlentities($msg) ?>
 	</div>
 <?php
 }
@@ -1442,7 +1290,13 @@ for ($lineno = 0, $i = ($pageno * $conf['display']['pagesize']); ($lineno < $con
 <?php
 global $total_size_used;
 global $footer;
-$footer = "Displaying page ".($pageno+1)."/".$nbpages." sorted on ".$orderby." in ".$order." order - Files " . (1+$pageno * $conf['display']['pagesize']) . ' - ' . min($n, ($pageno+1)*$conf['display']['pagesize']) . ' out of ' . $n . ' - ' . "Page contains " . formatBytes($page_size_used,2) . ' out of ' . formatBytes($total_size_used,2);
+$fotter = '';
+$footer .= "Displaying page ".($pageno+1)."/".$nbpages." sorted on ".$orderby." in ".$order." order";
+if ($n > 0)
+{
+	$footer .= " - Files " . (1+$pageno * $conf['display']['pagesize']) . ' - ' . min($n, ($pageno+1)*$conf['display']['pagesize']) . ' out of ' . $n;
+	$footer .= ' - ' . "Page contains " . formatBytes($page_size_used,2) . ' out of ' . formatBytes($total_size_used,2);
+}
 $footer .= ' - Native encoding: ' . $root['encoding'];
 $footer .= '&nbsp;&nbsp;' . csv_button ();
 if ($root['upload'] == 'yes')
@@ -1467,7 +1321,8 @@ session_invalidate(): void
 //==========================================================
 
 $debugstr = '';
-set_path();
+if ($path == '')
+	set_path();
 //if ($path == '')
 	//$path = $default_dir;
 get_dir_content ();
