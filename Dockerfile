@@ -8,4 +8,4 @@ RUN \
 COPY index.php /var/www/html/
 COPY filebrowser.css /var/www/html/
 RUN mkdir /etc/filebrowser
-COPY conf.json /etc/filebrowser/conf.json
+COPY conf.json.sample /etc/filebrowser/conf.json
