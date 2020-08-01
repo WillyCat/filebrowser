@@ -1,4 +1,4 @@
-FROM php:7.3-apache
+FROM php:7.4-apache
 RUN \
     apt-get update && \
     apt-get install libldap2-dev -y && \
