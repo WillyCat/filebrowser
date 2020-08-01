@@ -1,4 +1,4 @@
 #!/bin/bash
 docker stop fb
-docker rm fb
+docker rm -f fb
 exit 0
