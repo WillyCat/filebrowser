@@ -8,6 +8,7 @@ $pageno = 0 ; // current page, first is 0
 // Code can set them anywhere
 //----------------------------------
 $errmsg = ''; // error is displayed *instead* of files - this is used for critical situation where no data can be displayed
+$errlevel = ''; // error level
 // info is displayed before files - it can be used for errors but does not prevents from displaying directory content
 $info_level = ''; // primary (bleu), secondary (gris clair), success (vert), danger (rouge), warning (jaune), info (gris-bleu), light (blanc), dark (gris fonce)
 $info_msg = '';
@@ -304,7 +305,7 @@ set_orderby(): void
 function
 set_path(string $origin = 'GET')
 {
-	global $path, $file, $pathname, $errmsg;
+	global $path, $queried_path, $file, $pathname, $errmsg, $errlevel;
 
 	$path = $file = '';
 
@@ -326,6 +327,7 @@ set_path(string $origin = 'GET')
 
 	// we have a path
 	$path = $from['path'];
+	$queried_path = $from['path'];
 
 	// do we also have a file ?
 	if (array_key_exists('file', $from))
@@ -358,6 +360,7 @@ set_path(string $origin = 'GET')
 	if ($path == '')
 	{
 		$errmsg = 'Cannot read directory'; // use same message for non-exitent and unreadable
+		$errlevel = 'danger';
 	}
 }
 
@@ -640,7 +643,7 @@ is_dir_allowed (string $path): bool
 function
 get_dir_content (): void
 {
-	global $errmsg, $conf, $path;
+	global $errmsg, $conf, $path, $errlevel;
 	global $total_size_used;
 	global $files;
 
@@ -687,7 +690,7 @@ get_dir_content (): void
 function
 parse_dir (): void
 {
-	global $errmsg, $conf, $path, $files;
+	global $errmsg, $conf, $path, $files, $errlevel, $queried_path;
 
 	//-------------------
 	// Determines real pathname
@@ -698,7 +701,16 @@ parse_dir (): void
 
 	if ($path == '')
 	{
-		$errmsg = 'Please select a valid directory';
+		if ($queried_path == '')
+		{
+			$errmsg = 'Please select a directory';
+			$errlevel = 'info';
+		}
+		else
+		{
+			$errmsg = 'Please select a valid directory';
+			$errlevel = 'danger';
+		}
 		return;
 	}
 
@@ -711,6 +723,7 @@ parse_dir (): void
 	if ($root == null)
 	{
 		$errmsg = 'You are not allowed to view this directory';
+		$errlevel = 'danger';
 		return;
 	}
 
@@ -721,6 +734,7 @@ parse_dir (): void
 	if (!is_dir ($path))
 	{
 		$errmsg = 'Not a directory';
+		$errlevel = 'danger';
 		return;
 	}
 
@@ -738,6 +752,7 @@ parse_dir (): void
 	if (!$dh)
 	{
 		$errmsg = 'Cannot read directory'; // use same message for non-exitent and unreadable
+		$errlevel = 'danger';
 		return;
 	}
 
@@ -1442,7 +1457,7 @@ if ($conf['auth'] == 'ldap') {
 <?php } // path != '' ?>
 <?php
 	if ($errmsg != '')
-		display_error ($errmsg);
+		display_error ($errmsg, $errlevel);
 	else
 		if (array_key_exists ('action', $_GET) && $_GET['action'] == 'upload-form')
 			display_upload_form ();
