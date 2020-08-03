@@ -996,7 +996,7 @@ make_link (int $page, string $linkpath = '',string $extra='', string $new_orderb
 		$linkpath = $path;
 	}
 
-	$link = '?path='.urlencode($linkpath).'&page='.$page;
+	$link = '?path='.rawurlencode($linkpath).'&page='.$page;
 	$link .= '&orderby=' . $new_orderby;
 	$link .= '&order=' . $new_order;
 	if ($extra != '')

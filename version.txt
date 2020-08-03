@@ -44,3 +44,5 @@ Date        Version  Changement
 2020-07-30     0.15  fix "1/0" on footer when no file
                      fix misc. bugs
                      exported styles to filebrowser.css
+2020-08-03     1.00
+2020-08-03     1.01  Fixed issue with some special chars (i.e. +) in subdirs
