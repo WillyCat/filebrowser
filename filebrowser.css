@@ -151,3 +151,13 @@ body {
 
 .border-top { border-top: 1px solid #e5e5e5; }
 .border-bottom { border-bottom: 1px solid #e5e5e5; }
+
+.feather-32 {
+	height: 32px;
+	width: 32px;
+}
+
+.message {
+	font-face: bold;
+	padding: 15px;
+}

@@ -3,6 +3,14 @@ $use_dropdowns = 0;	// dropdown require bootstrap.js + popper.js - if not used, 
 $path = '';   // current directory
 $pageno = 0 ; // current page, first is 0
 
+$ver = '';
+if (file_exists ('version'))
+{
+	$ver = file_get_contents ('version');
+	if ($ver === false)
+		$ver = '';
+}
+
 //----------------------------------
 // Misc. globals
 // Code can set them anywhere
@@ -520,6 +528,8 @@ do_login(): void
 function
 send_html_head(): void
 {
+	global $ver;
+
 	echo '<!doctype html>
 <html lang="en">
   <head>
@@ -528,7 +538,7 @@ send_html_head(): void
     <meta name="description" content="">
     <meta name="author" content="">
 
-    <title>File browsing</title>
+    <title>File browsing '.$ver.'</title>
 
     <!-- Bootstrap core CSS -->
 <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
@@ -844,6 +854,8 @@ global_failure(string $msg): void
 function
 show_login_form(): void
 {
+	global $ver;
+
 	send_html_head();
 	echo '
 <body class="text-center">
@@ -858,7 +870,7 @@ show_login_form(): void
       <label for="inputPassword" class="sr-only">Password</label>
       <input type="password" id="inputPassword" class="form-control" placeholder="Password" required="" name="password">
       <button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
-      <p class="mt-5 mb-3 text-muted">(c) 2020</p>
+      <p class="mt-5 mb-3 text-muted">V '$ver.' (c) 2020</p>
     </form>
 </body>
 </html>';
