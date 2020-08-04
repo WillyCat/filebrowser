@@ -5,7 +5,8 @@ RUN \
     rm -rf /var/lib/apt/lists/* && \
     docker-php-ext-configure ldap --with-libdir=lib/x86_64-linux-gnu/ && \
     docker-php-ext-install ldap
-RUN echo "SetEnv VER ${VER}" > /etc/apache2/conf-enabled/environment.conf
+COPY version /var/www/html/
+COPY folder.png /var/www/html/
 COPY index.php /var/www/html/
 COPY filebrowser.css /var/www/html/
 RUN mkdir /etc/filebrowser

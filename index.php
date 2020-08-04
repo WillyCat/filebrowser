@@ -1,6 +1,21 @@
 <?php
+// GET:
+// action (bookmark, logout)
+// dir [, page]
+// dir, action (export)
+// dir, file, action (download, delete, upload-form)
+// dir, page, file, action (confirm-delete)
+// POST:
+// login, password
+// action (upload)
+
 $use_dropdowns = 0;	// dropdown require bootstrap.js + popper.js - if not used, have lighter footprint by not importing them
+
 $path = '';   // current directory
+$file = 0;
+$page = 0;
+$action = '';
+
 $pageno = 0 ; // current page, first is 0
 
 $ver = '';
@@ -11,6 +26,12 @@ if (file_exists ('version'))
 		$ver = '';
 }
 
+if (array_key_exists ('action', $_GET))
+	$action = $_GET['action'];
+else
+	if (array_key_exists ('action', $_POST))
+		$action = $_POST['action'];
+
 //----------------------------------
 // Misc. globals
 // Code can set them anywhere
@@ -18,8 +39,13 @@ if (file_exists ('version'))
 $errmsg = ''; // error is displayed *instead* of files - this is used for critical situation where no data can be displayed
 $errlevel = ''; // error level
 // info is displayed before files - it can be used for errors but does not prevents from displaying directory content
+$feather = '';
+
 $info_level = ''; // primary (bleu), secondary (gris clair), success (vert), danger (rouge), warning (jaune), info (gris-bleu), light (blanc), dark (gris fonce)
 $info_msg = '';
+$info_buttons = [ ];
+$info_feather = '';
+
 $footer = ''; // footer is displayed at bottom of page
 $default_dir = '/tmp';
 
@@ -70,7 +96,7 @@ date_default_timezone_set($conf['tz']);
 //----------------------------------
 session_start();
 
-if (array_key_exists ('action', $_GET) && $_GET['action'] == 'logout')
+if ($action == 'logout')
 	session_invalidate();
 
 // if changing auth method to ldap, sessions already open
@@ -111,7 +137,7 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 	else
 		$bookmarks = [ ];
 
-	if (array_key_exists ('action', $_GET) && $_GET['action'] == 'bookmark')
+	if ($aaction == 'bookmark')
 	{
 		set_path();
 		if (is_dir_allowed ($path))
@@ -120,6 +146,8 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 			if (in_array ($path, $bookmarks))
 			{
 				$info_msg   = 'Bookmark removed';
+				$info_feather = 'check-circle';
+
 				if (($key = array_search($path, $bookmarks)) !== false)
 				    unset($bookmarks[$key]);
 			}
@@ -128,11 +156,13 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 				{
 					$info_msg   = 'Maximum number of bookmarks reached';
 					$info_level = 'warning';
+					$info_feather = 'slash';
 				}
 				else
 				{
 					$info_msg   = 'Bookmark added';
 					$bookmarks[] = $path;
+					$info_feather = 'check-circle';
 				}
 			$bookmarks_cookie_value = serialize($bookmarks);
 			setcookie ($bookmarks_cookie_name, $bookmarks_cookie_value);
@@ -143,7 +173,7 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 //==============================================================
 // UPLOAD A FILE
 //==============================================================
-if (array_key_exists ('action', $_POST) && $_POST['action'] == 'upload')
+if ($action == 'upload')
 {
 	set_path('POST');
 
@@ -155,8 +185,9 @@ if (array_key_exists ('action', $_POST) && $_POST['action'] == 'upload')
 
 		if (strlen ($name) == 0)
 		{
-			$info_msg = 'No file selected';
+			$info_msg = 'No file selected for upload';
 			$info_level = 'warning';
+			$info_feather = 'slash';
 		}
 		else
 		{
@@ -166,17 +197,20 @@ if (array_key_exists ('action', $_POST) && $_POST['action'] == 'upload')
 			{
 				$info_msg = 'File successfuly uploaded';
 				$info_level = 'success';
+				$info_feather = 'check-circle';
 			}
 			else
 			{
 				$info_msg = 'Upload failure';
 				$info_level = 'danger';
+				$info_feather = 'alert-triangle';
 			}
 		}
 	}
 	else
 	{
 		$info_msg = 'Upload not allowed in this directory';
+		$info_feather = 'slash';
 		$info_level = 'danger';
 	}
 }
@@ -184,7 +218,7 @@ if (array_key_exists ('action', $_POST) && $_POST['action'] == 'upload')
 // Deletion confirmation
 //==============================================================
 
-if (array_key_exists ('action', $_GET) && $_GET['action'] == 'confirm-delete')
+if ($action == 'confirm-delete')
 {
 	set_path();
 	set_pageno();
@@ -193,22 +227,21 @@ if (array_key_exists ('action', $_GET) && $_GET['action'] == 'confirm-delete')
 	if ($root == null || $root['delete'] == 'no')
 	{
 		$info_msg = 'This action is not allowed in this directory';
+		$info_feather = 'slash';
 		$info_level = 'danger';
 	}
 	else
 	{
 		$info_msg = 'Delete ' . htmlentities($file) . ' ?';
-		$info_msg .= '&nbsp;';
-		$info_msg .= '&nbsp;';
-		$info_msg .= '&nbsp;';
-		$info_msg .= '&nbsp;';
-		//$info_msg .= '<button type="button" class="btn btn-danger" ><span data-feather="trash"></span>&nbsp;&nbsp;YES</button>';
+		$info_feather = 'help-circle';
+
 		$no_link = make_link ($pageno+1);
 		$no_link .= '&file=' . $file;
 		$yes_link = $no_link . '&action=delete';
-		$info_msg .= '<a class="btn btn-primary" href="'.$yes_link.'" role="button">Yes</a>';
-		$info_msg .= '&nbsp;';
-		$info_msg .= '<a class="btn btn-primary" href="'.$no_link.'" role="button">No</a>';
+
+		$info_buttons[] = '<a class="btn btn-primary" href="'.$yes_link.'" role="button">Yes</a>';
+		$info_buttons[] = '<a class="btn btn-primary" href="'.$no_link.'" role="button">No</a>';
+
 		$info_level = 'warning';
 	}
 }
@@ -217,14 +250,14 @@ if (array_key_exists ('action', $_GET) && $_GET['action'] == 'confirm-delete')
 // Deletion (effective)
 //==============================================================
 
-if (array_key_exists ('action', $_GET) && $_GET['action'] == 'delete')
+if ($action == 'delete')
 {
 	set_path();
 	$root = get_volume ($path);
 	if ($root == null || $root['delete'] == 'no')
 	{
 		$info_msg = 'This action is not allowed in this directory';
-		$info_level = 'danger';
+		$info_level = 'slash';
 	}
 	else
 	{
@@ -232,11 +265,13 @@ if (array_key_exists ('action', $_GET) && $_GET['action'] == 'delete')
 		{
 			$info_msg = 'File ' .$file. ' deleted';
 			$info_level = 'success';
+			$info_feather = 'check-circle';
 		}
 		else
 		{
 			$info_msg = 'Deletion failed';
 			$info_level = 'danger';
+			$info_feather = 'alert-triangle';
 		}
 
 		/*
@@ -249,7 +284,7 @@ if (array_key_exists ('action', $_GET) && $_GET['action'] == 'delete')
 //==============================================================
 // Export CSV file with dir content
 //==============================================================
-if (array_key_exists ('action', $_GET) && $_GET['action'] == 'export')
+if ($action == 'export')
 {
 	set_path();
 	if ($conf['csv']['enabled'] == 'yes' && is_dir_allowed ($path))
@@ -267,7 +302,7 @@ if (array_key_exists ('action', $_GET) && $_GET['action'] == 'export')
 //==============================================================
 // Download a file
 //==============================================================
-if (array_key_exists ('action', $_GET) && $_GET['action'] == 'download')
+if ($action == 'download')
 {
 	set_path();
 	$root = get_volume ($path);
@@ -537,6 +572,7 @@ send_html_head(): void
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="">
     <meta name="author" content="">
+    <link rel="icon" href="folder.png" />
 
     <title>File browsing '.$ver.'</title>
 
@@ -839,7 +875,7 @@ global_failure(string $msg): void
 <h1 class="display-3">Error !</h1>
 <p>
 ';
-	display_error ($msg);
+	display_error ($msg, 'danger', 'alert-triangle');
 	echo '
 </p>
 </div>
@@ -857,12 +893,15 @@ show_login_form(): void
 	global $ver;
 
 	send_html_head();
+
 	echo '
-<body class="text-center">
+	<body class="text-center">
 	<form class="form-signin" data-bitwarden-watching="1" method="POST" action="index.php">
 	';
-	global $info_msg, $info_level;
-	display_error ($info_msg, $info_level);
+
+	global $info_msg, $info_level, $info_feather;
+	display_error ($info_msg, $info_level, $info_feather);
+
 	echo '
       <h1 class="h3 mb-3 font-weight-normal">Please sign in</h1>
       <label for="inputEmail" class="sr-only">Account</label>
@@ -870,10 +909,27 @@ show_login_form(): void
       <label for="inputPassword" class="sr-only">Password</label>
       <input type="password" id="inputPassword" class="form-control" placeholder="Password" required="" name="password">
       <button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
-      <p class="mt-5 mb-3 text-muted">V '$ver.' (c) 2020</p>
-    </form>
-</body>
-</html>';
+      <p class="mt-5 mb-3 text-muted">V '.$ver.' (c) 2020</p>';
+
+/*
+	global $path;
+	if ($path != '')
+		echo '<input type="hidden" path="' . $path . '">' . "\n";
+
+	global $file;
+	if ($file != '')
+		echo '<input type="hidden" file="' . $file . '">' . "\n";
+
+	global $page;
+	if ($page != 0)
+		echo '<input type="hidden" page="' . $page . '">' . "\n";
+
+	global $action;
+	if ($action != '')
+		echo '<input type="hidden" action="' . $action . '">' . "\n";
+*/
+
+	echo ' </form> </body> </html>';
 }
 
 function
@@ -1194,13 +1250,28 @@ csv_button (): string
 //----------------------------------------------------------
 
 function
-display_error (string $msg, string $level = 'danger'): void
+display_error (string $msg, string $level = 'danger', string $feather = '', array $buttons = null): void
 {
 	if ($msg == '')
 		return;
+
 ?>
 	<div class="alert alert-<?=$level ?>" role="alert">
-	  <?=htmlentities($msg) ?>
+<?php
+	if ($feather != '')
+		echo '<span class="feather-32" data-feather="'.$feather.'"></span>';
+?>
+	  <div class="align-middle message"><?=htmlentities($msg) ?></div>
+<?php
+	if ($buttons != null)
+	{
+		echo '&nbsp;';
+		echo '&nbsp;';
+		echo '&nbsp;';
+		foreach ($buttons as $button)
+			echo $button . '&nbsp;';
+	}
+?>
 	</div>
 <?php
 }
@@ -1433,7 +1504,7 @@ if ($conf['auth'] == 'ldap') {
         <main role="main" class="col-md-9 ml-sm-auto col-lg-10 pt-3 px-4">
 
 <?php
-	display_error($info_msg, $info_level);
+	display_error($info_msg, $info_level, $info_feather, $info_buttons);
 ?>
 
 <?php if ($path != '') { ?>
@@ -1469,9 +1540,9 @@ if ($conf['auth'] == 'ldap') {
 <?php } // path != '' ?>
 <?php
 	if ($errmsg != '')
-		display_error ($errmsg, $errlevel);
+		display_error ($errmsg, $errlevel, $feather);
 	else
-		if (array_key_exists ('action', $_GET) && $_GET['action'] == 'upload-form')
+		if ($action == 'upload-form')
 			display_upload_form ();
 		else
 			display_files ();

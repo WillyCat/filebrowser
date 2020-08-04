@@ -46,3 +46,9 @@ Date        Version  Changement
                      exported styles to filebrowser.css
 2020-08-03     1.00
 2020-08-03     1.01  Fixed issue with some special chars (i.e. +) in subdirs
+2020-08-04     1.10  Renamed run.sh as start.sh
+                     Display version number
+                     New file: version
+2020-08-04     1.11  Code refactoring
+2020-08-04     1.12  Added glyph in front of messages
+                     Added favicon (from stockio free icons)

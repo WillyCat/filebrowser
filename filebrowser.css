@@ -155,9 +155,14 @@ body {
 .feather-32 {
 	height: 32px;
 	width: 32px;
+	position: relative;
+	top: 8px;
 }
 
 .message {
-	font-face: bold;
+	font-weight: bold;
+	display: inline-block;
+	position: abolute;
+	top: 2px;
 	padding: 15px;
 }
