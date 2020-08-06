@@ -52,3 +52,4 @@ Date        Version  Changement
 2020-08-04     1.11  Code refactoring
 2020-08-04     1.12  Added glyph in front of messages
                      Added favicon (from stockio free icons)
+2020-08-06     1.14  Code refactoring

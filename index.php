@@ -107,15 +107,15 @@ if ($_SESSION['filebrowseruser'] == 'anonymous' && $conf['auth'] == 'ldap')
 if (!session_is_valid())
 {
 	if ($conf['auth'] == 'none') // auto-login
-		$_SESSION['filebrowseruser'] = 'anonymous';
+		login_as ('anonymous');
 	else // real login
 	{
 		// without a valid session, only two actions can be performed:
 		// - display login form
 		// - process login form
 
-		if (array_key_exists ('login', $_POST))
-			do_login();
+		if ($action == 'login')
+			authenticate ();
 
 		if (!session_is_valid())
 		{
@@ -177,7 +177,14 @@ if ($action == 'upload')
 {
 	set_path('POST');
 
-	if (is_dir_allowed ($path))
+	$root = get_volume ($path);
+	if ($root == null || $root['upload'] == 'no')
+	{
+		$info_msg = 'Upload not allowed in this directory';
+		$info_feather = 'slash';
+		$info_level = 'danger';
+	}
+	else
 	{
 		$name = $_FILES["fileToUpload"]["name"];
 		$size = $_FILES["fileToUpload"]["size"];
@@ -207,12 +214,6 @@ if ($action == 'upload')
 			}
 		}
 	}
-	else
-	{
-		$info_msg = 'Upload not allowed in this directory';
-		$info_feather = 'slash';
-		$info_level = 'danger';
-	}
 }
 //==============================================================
 // Deletion confirmation
@@ -226,7 +227,7 @@ if ($action == 'confirm-delete')
 	$root = get_volume ($path);
 	if ($root == null || $root['delete'] == 'no')
 	{
-		$info_msg = 'This action is not allowed in this directory';
+		$info_msg = 'Deletion is not allowed in this directory';
 		$info_feather = 'slash';
 		$info_level = 'danger';
 	}
@@ -235,9 +236,9 @@ if ($action == 'confirm-delete')
 		$info_msg = 'Delete ' . htmlentities($file) . ' ?';
 		$info_feather = 'help-circle';
 
-		$no_link = make_link ($pageno+1);
-		$no_link .= '&file=' . $file;
-		$yes_link = $no_link . '&action=delete';
+		global $pageno;
+		$no_link = make_link ([ 'page'=>$pageno+1 ]);
+		$yes_link = make_link ([ 'page'=>$pageno+1, 'file' => $file, 'action' => 'delete' ]);
 
 		$info_buttons[] = '<a class="btn btn-primary" href="'.$yes_link.'" role="button">Yes</a>';
 		$info_buttons[] = '<a class="btn btn-primary" href="'.$no_link.'" role="button">No</a>';
@@ -256,8 +257,9 @@ if ($action == 'delete')
 	$root = get_volume ($path);
 	if ($root == null || $root['delete'] == 'no')
 	{
-		$info_msg = 'This action is not allowed in this directory';
-		$info_level = 'slash';
+		$info_msg = 'This action is not allowed';
+		$info_feather = 'slash';
+		$info_level = 'danger';
 	}
 	else
 	{
@@ -348,7 +350,7 @@ set_orderby(): void
 function
 set_path(string $origin = 'GET')
 {
-	global $path, $queried_path, $file, $pathname, $errmsg, $errlevel;
+	global $path, $queried_path, $file, $pathname, $errmsg, $errlevel, $feather;
 
 	$path = $file = '';
 
@@ -362,6 +364,7 @@ set_path(string $origin = 'GET')
 		break;
 	default :
 		$errmsg = 'Invalid origin';
+		$feather = 'alert-triangle';
 		return;
 	}
 
@@ -369,16 +372,16 @@ set_path(string $origin = 'GET')
 		return; // no path, no info
 
 	// we have a path
-	$path = $from['path'];
-	$queried_path = $from['path'];
+	$path = rawurldecode ($from['path']);
+	$queried_path = $path;
 
 	// do we also have a file ?
-	if (array_key_exists('file', $from))
+	if (array_key_exists('file', $from) && ($from['file'] != ''))
 	{
 		// yes, path + file
 
 		// retrieve file
-		$file = $from['file'];
+		$file = rawurldecode ($from['file']);
 
 		// put them together and retrieve each one
 		// this will prevent something like
@@ -396,14 +399,14 @@ set_path(string $origin = 'GET')
 	}
 	else // no, path only
 	{
-		$path = realpath($path); // clears $path is does not exists
+		$path = realpath($path); // returns '' is non-existent
 	}
 
-	// realpath() return an empty string is directory does not exists
 	if ($path == '')
 	{
 		$errmsg = 'Cannot read directory'; // use same message for non-exitent and unreadable
 		$errlevel = 'danger';
+		$feather = 'alert-triangle';
 	}
 }
 
@@ -504,9 +507,9 @@ csv_to_stdout (string $path): void
 } 
 
 function
-do_login(): void
+authenticate (): void
 {
-	global $info_msg, $info_level;
+	global $info_msg, $info_level, $info_feather;
 	global $conf;
 
 	$login = $_POST['login'];
@@ -515,12 +518,14 @@ do_login(): void
 	{
 		$info_msg = 'Empty login';
 		$info_level = 'danger';
+		$info_feather = '';
 		return;
 	}
 	if (!array_key_exists ('password', $_POST) || ($_POST['password'] == ''))
 	{
 		$info_msg = 'Empty password';
 		$info_level = 'danger';
+		$info_feather = '';
 		return;
 	}
 	$password = $_POST['password'];
@@ -529,6 +534,7 @@ do_login(): void
 	{
 		$info_msg = 'missing function ldap_connect(), please review PHP configuration';
 		$info_level = 'danger';
+		$info_feather = 'alert-triangle';
 		return;
 	}
 
@@ -537,6 +543,7 @@ do_login(): void
 	{
 		$info_msg = 'Cannot connect to LDAP server (' . $conf['ldap']['server'] . ')';
 		$info_level = 'danger';
+		$info_feather = 'alert-triangle';
 		return;
 	}
 
@@ -551,14 +558,14 @@ do_login(): void
 	ldap_close($ldapconn);
 
 	if ($lb === true)	// LDAP - OK
-		$_SESSION['filebrowseruser'] = $login; // make session valid
+		login_as ($login);
 	else
 	{
 		$info_msg = 'Invalid credential';
 		$info_level = 'danger';
+		$info_feather = 'slash';
 	}
 }
-
 
 function
 send_html_head(): void
@@ -736,7 +743,7 @@ get_dir_content (): void
 function
 parse_dir (): void
 {
-	global $errmsg, $conf, $path, $files, $errlevel, $queried_path;
+	global $errmsg, $feather, $conf, $path, $files, $errlevel, $queried_path;
 
 	//-------------------
 	// Determines real pathname
@@ -754,8 +761,9 @@ parse_dir (): void
 		}
 		else
 		{
-			$errmsg = 'Please select a valid directory';
+			$errmsg = 'Not a valid directory';
 			$errlevel = 'danger';
+			$feather = 'alert-triangle';
 		}
 		return;
 	}
@@ -768,8 +776,9 @@ parse_dir (): void
 	$root = get_volume ($path);
 	if ($root == null)
 	{
-		$errmsg = 'You are not allowed to view this directory';
+		$errmsg = 'You are not allowed to view this directory ('.$path.')';
 		$errlevel = 'danger';
+		$feather = 'slash';
 		return;
 	}
 
@@ -781,6 +790,7 @@ parse_dir (): void
 	{
 		$errmsg = 'Not a directory';
 		$errlevel = 'danger';
+		$feather = 'slash';
 		return;
 	}
 
@@ -799,6 +809,7 @@ parse_dir (): void
 	{
 		$errmsg = 'Cannot read directory'; // use same message for non-exitent and unreadable
 		$errlevel = 'danger';
+		$feather = 'alert-triangle';
 		return;
 	}
 
@@ -928,6 +939,7 @@ show_login_form(): void
 	if ($action != '')
 		echo '<input type="hidden" action="' . $action . '">' . "\n";
 */
+	echo '<input type="hidden" action="login">';
 
 	echo ' </form> </body> </html>';
 }
@@ -949,9 +961,11 @@ display_action(string $action, array $file, array $root): void
 			$feather = 'trash';
 			$title = 'Delete file';
 			global $pageno;
-			$action_link = make_link ($pageno+1);
-			$action_link .= '&action=confirm-delete';
-			$action_link .= '&file=' . $file['name'];
+			$action_link = make_link ([
+				'page' => $pageno+1,
+				'action' => 'confirm-delete',
+				'file' => $file['name']
+			]);
 		}
 		break;
 	case 'download': 
@@ -960,9 +974,11 @@ display_action(string $action, array $file, array $root): void
 			$feather = 'download';
 			$title = 'Download file';
 			global $pageno;
-			$action_link = make_link ($pageno+1);
-			$action_link .= '&action=download';
-			$action_link .= '&file=' . $file['name'];
+			$action_link = make_link ([
+				'page' => $pageno+1,
+				'action' => 'download',
+				'file' => $file['name']
+			]);
 		}
 		break;
 	default :
@@ -1057,33 +1073,37 @@ display_line (int $i, array $file, array $columns, array $root): void
 }
 
 function
-make_js_link (int $page, string $extra = ''): string
+make_js_link (array $parms): string
 {
-	$url = 'index.php' . make_link ($page, '', $extra);
+	$url = 'index.php' . make_link ($parms);
 	return 'window.location=' . "'" . $url . "'";
 }
 
 function
-make_link (int $page, string $linkpath = '',string $extra='', string $new_orderby = '', string $new_order = ''): string
+make_link (array $parms): string
 {
-	global $orderby, $order;
+	// fill missing entries
+	$parmskeys = [ 'path', 'page', 'orderby', 'order', 'action', 'file' ];
+	foreach ($parmskeys as $parmkey)
+		if (!array_key_exists ($parmkey, $parms))
+			$parms[$parmkey] = '';
 
-	if ($new_orderby == '')
-		$new_orderby = $orderby;
-	if ($new_order == '')
-		$new_order = $order;
+	// re-use current settings
+	global $orderby, $order, $path;
+	if ($parms['orderby'] == '')
+		$parms['orderby'] = $orderby;
+	if ($parms['order'] == '')
+		$parms['order'] = $order;
+	if ($parms['path'] == '')
+		$parms['path'] = $path;
 
-	if ($linkpath == '')
-	{
-		global $path;
-		$linkpath = $path;
-	}
+	// encode each part
+	$urlparts = [ ];
+	foreach ($parms as $key => $value)
+		$urlparts[] = $key . '=' . rawurlencode ($parms[$key]);
 
-	$link = '?path='.rawurlencode($linkpath).'&page='.$page;
-	$link .= '&orderby=' . $new_orderby;
-	$link .= '&order=' . $new_order;
-	if ($extra != '')
-		$link .= '&' . $extra;
+	// paste parts together
+	$link = '?' . implode ('&', $urlparts);
 
 	return $link;
 }
@@ -1098,7 +1118,7 @@ show_page (int $page, int $pageno): void
 	else
 		$item_attributes = '';
 
-	$page_link = make_link ($page);
+	$page_link = make_link (['page'=>$page]);
 ?>    
     <li class="page-item <?=$item_attributes ?>"><a class="page-link" href="<?=$page_link?>"><?=$page ?></a></li>
 <?php
@@ -1128,19 +1148,19 @@ show_pagination_large (int $pageno_active, int $nbpages): void
 	{
 		$prev_class = 'disabled';
 		$prev_attributes = 'aria-disabled="true"';
-		$prev_link = make_js_link ($pageno_active + 1);
+		$prev_link = make_js_link ([ 'page' => $pageno_active + 1 ]);
 	}
 	else
-		$prev_link = make_js_link ($pageno_active);
+		$prev_link = make_js_link ([ 'page' => $pageno_active ]);
 
 	if (($pageno_active+1) >= $nbpages)
 	{
 		$next_class = 'disabled';
 		$next_attributes = 'aria-disabled="true"';
-		$next_link = make_js_link ($pageno_active+1);
+		$next_link = make_js_link ([ 'page' => $pageno_active+1 ]);
 	}
 	else
-		$next_link = make_js_link ($pageno_active+2);
+		$next_link = make_js_link ([ 'page' => $pageno_active+2 ]);
 
 	global $path;
 ?>
@@ -1172,13 +1192,13 @@ show_pagination_small (int $pageno_active, int $nbpages): void
 		$prev_attributes = 'disabled';
 	else
 		$prev_attributes = '';
-	$prev_link = make_link ($pageno_active);
+	$prev_link = make_link (['page'=>$pageno_active]);
 
 	if (($pageno_active+1) >= $nbpages)
 		$next_attributes = 'disabled';
 	else
 		$next_attributes = '';
-	$next_link = make_link ($pageno_active+2);
+	$next_link = make_link (['page'=>$pageno_active+2]);
 ?>
 <nav aria-label="Page navigation">
   <ul class="pagination justify-content-end">
@@ -1216,7 +1236,7 @@ upload_button (): string
 
 	$str  = '<span';
 	$str .= ' class="badge badge-secondary clickable"';
-	$str .= ' onClick=' . '"' . make_js_link($pageno+1,'action=upload-form') . '"';
+	$str .= ' onClick=' . '"' . make_js_link([ 'page' => $pageno+1,'action' => 'upload-form' ]) . '"';
 	$str .= '>';
 	$str .= '<span data-feather="upload"></span>';
 	$str .= '&nbsp;&nbsp;UPLOAD';
@@ -1237,7 +1257,7 @@ csv_button (): string
 
 	$str  = '<span';
 	$str .= ' class="badge badge-secondary clickable"';
-	$str .= ' onClick=' . '"' . make_js_link($pageno+1,'action=export') . '"';
+	$str .= ' onClick=' . '"' . make_js_link([ 'page' => $pageno+1,'action' => 'export' ]) . '"';
 	$str .= ' title="Export directory content in CSV format"';
 	$str .= '>';
 	$str .= '<span data-feather="arrow-down-circle"></span>';
@@ -1352,7 +1372,12 @@ foreach ($columns as $column)
 	if ($sortname != '')
 	{
 		$new_order = (($order == 'asc') ? 'desc' : 'asc');
-		$sortlink = make_link($pageno+1, '', '', $sortname, $new_order);
+		//$sortlink = make_link($pageno+1, '', '', $sortname, $new_order);
+		$sortlink = make_link([
+			'page' => 1,
+			'orderby' => $sortname,
+			'order' => $new_order
+		]);
 		echo '<a href="'.$sortlink.'">';
 		echo $column;
 		echo '</a>';
@@ -1414,6 +1439,12 @@ session_invalidate(): void
 	unset ($_SESSION['filebrowseruser']);
 }
 
+function
+login_as (string $username): void
+{
+	$_SESSION['filebrowseruser'] = $username; // make session valid
+}
+
 //==========================================================
 // MAIN
 //==========================================================
@@ -1457,16 +1488,30 @@ send_html_head();
 <?php
 	foreach ($conf['volumes'] as $volume)
 	{
-		if (is_dir($volume['path'])) {
-?>
-              <li class="nav-item">
-                <a class="nav-link active" href="<?= make_link (1,$volume['path']) ?>" title="<?=$volume['path'] ?>">
-                  <span data-feather="folder"></span>
-                  <span class="" ><?=htmlentities($volume['name']) ?></span>
-                </a>
-              </li>
-<?php
-		} // is_dir
+		if (is_dir($volume['path']))
+		{
+			$href = make_link ([
+				'page' => 1,
+				'path' => $volume['path']
+			]);
+			$title = $volume['path'];
+			$f = 'folder';
+		}
+		else
+		{
+			$href = "javascript:alert('Unavailable directory')";
+			$title = 'Unreachable directory';
+			$f = 'slash';
+		}
+
+		echo '<li class="nav-item">';
+		//if ($href != '')
+			echo '<a class="nav-link active" href="' . $href . '" title="' . $title . '">';
+		echo '<span data-feather="' . $f . '"></span>';
+		echo '<span class="">' . htmlentities($volume['name']) . '</span>';
+		//if ($href != '')
+			echo '</a>';
+		echo '</li>';
 	}
 ?>
 <?php
@@ -1475,7 +1520,7 @@ send_html_head();
 		{
 ?>
 		      <li class="nav-item">
-			<a class="nav-link active" href="<?= make_link (1,$bookmark) ?>" title="<?=$bookmark?>">
+			<a class="nav-link active" href="<?= make_link ([ 'page' => 1, 'path' => $bookmark ]) ?>" title="<?=$bookmark?>">
 			  <span data-feather="bookmark"></span>
 			  <span class="bookmark"><?=shorten($bookmark) ?></span>
 			</a>
@@ -1516,7 +1561,10 @@ if ($conf['auth'] == 'ldap') {
 	echo '<li class="breadcrumb-item">';
 	if ($conf['bookmarks']['enabled'] == 'yes')
 	{
-		echo '<A HREF="'.make_link($pageno+1,'','action=bookmark').'" title="Bookmark this directory">';
+		echo '<A HREF="'.make_link([
+			'page' => $pageno+1,
+			'action' => 'bookmark'
+		]).'" title="Bookmark this directory">';
 		echo '<span';
 		echo ' class="clickable"';
 		echo ' data-feather="bookmark"';
@@ -1529,8 +1577,8 @@ if ($conf['auth'] == 'ldap') {
 	{
 		if ($dirlevel == '')
 			continue;
-			$linkpath .= '/' . $dirlevel;
-		$link = make_link (1,$linkpath);
+		$linkpath .= '/' . $dirlevel;
+		$link = make_link ([ 'page' => 1, 'path' => $linkpath ]);
 		echo '<li class="breadcrumb-item"><A HREF="' . $link . '" title="'.$linkpath.'">' . $dirlevel . '</a></li>';
 	}
 	?>
