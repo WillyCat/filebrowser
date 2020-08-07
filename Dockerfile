@@ -7,7 +7,12 @@ RUN \
     docker-php-ext-install ldap
 COPY version /var/www/html/
 COPY folder.png /var/www/html/
-COPY index.php /var/www/html/
-COPY filebrowser.css /var/www/html/
+COPY *.php /var/www/html/
+RUN mkdir /var/www/classes
+COPY classes/*.php /var/www/classes/
+RUN mkdir /var/www/html/css
+COPY css/*.css* /var/www/html/css/
+RUN mkdir /var/www/html/images
+COPY images/* /var/www/html/images/
 RUN mkdir /etc/filebrowser
 COPY conf.json.sample /etc/filebrowser/conf.json

@@ -1,4 +1,7 @@
 <?php
+require_once '../classes/filename.class.php';
+require_once '../classes/message.class.php';
+require_once '../classes/session.class.php';
 // GET:
 // action (bookmark, logout)
 // dir [, page]
@@ -36,15 +39,9 @@ else
 // Misc. globals
 // Code can set them anywhere
 //----------------------------------
-$errmsg = ''; // error is displayed *instead* of files - this is used for critical situation where no data can be displayed
-$errlevel = ''; // error level
-// info is displayed before files - it can be used for errors but does not prevents from displaying directory content
-$feather = '';
 
-$info_level = ''; // primary (bleu), secondary (gris clair), success (vert), danger (rouge), warning (jaune), info (gris-bleu), light (blanc), dark (gris fonce)
-$info_msg = '';
-$info_buttons = [ ];
-$info_feather = '';
+$error = new message(); // error is displayed *instead* of files - this is used for critical situation where no data can be displayed
+$info = new message(); // info is display *before* files when error does not prevents from displaying dir content
 
 $footer = ''; // footer is displayed at bottom of page
 $default_dir = '/tmp';
@@ -94,20 +91,20 @@ date_default_timezone_set($conf['tz']);
 //----------------------------------
 // Session management
 //----------------------------------
-session_start();
+$session = new session();
 
 if ($action == 'logout')
-	session_invalidate();
+	$session -> invalidate();
 
 // if changing auth method to ldap, sessions already open
 // and gained with no auth are no longer valid
-if ($_SESSION['filebrowseruser'] == 'anonymous' && $conf['auth'] == 'ldap')
-	session_invalidate();
+if ($session -> getLogin() == 'anonymous' && $conf['auth'] == 'ldap')
+	$session -> invalidate();
 
-if (!session_is_valid())
+if (!$session -> is_valid())
 {
 	if ($conf['auth'] == 'none') // auto-login
-		login_as ('anonymous');
+		$session -> setLogin ('anonymous');
 	else // real login
 	{
 		// without a valid session, only two actions can be performed:
@@ -117,7 +114,7 @@ if (!session_is_valid())
 		if ($action == 'login')
 			authenticate ();
 
-		if (!session_is_valid())
+		if (!$session -> is_valid())
 		{
 			show_login_form();
 			die();
@@ -145,24 +142,29 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 			$info_level = 'success';
 			if (in_array ($path, $bookmarks))
 			{
-				$info_msg   = 'Bookmark removed';
-				$info_feather = 'check-circle';
+				$info -> set ([
+					'msg'  => 'Bookmark removed',
+					'feather' => 'check-circle'
+				]);
 
 				if (($key = array_search($path, $bookmarks)) !== false)
 				    unset($bookmarks[$key]);
 			}
 			else
 				if (count($bookmarks) >= $conf['bookmarks']['max'])
-				{
-					$info_msg   = 'Maximum number of bookmarks reached';
-					$info_level = 'warning';
-					$info_feather = 'slash';
-				}
+					$info -> set([
+						'msg' => 'Maximum number of bookmarks reached',
+						'level' => 'warning',
+						'feather' => 'slash'
+					]);
 				else
 				{
-					$info_msg   = 'Bookmark added';
+					$info -> set ([
+						'msg' => 'Bookmark added',
+						'feather' =>  'check-circle'
+					]);
+
 					$bookmarks[] = $path;
-					$info_feather = 'check-circle';
 				}
 			$bookmarks_cookie_value = serialize($bookmarks);
 			setcookie ($bookmarks_cookie_name, $bookmarks_cookie_value);
@@ -179,11 +181,11 @@ if ($action == 'upload')
 
 	$root = get_volume ($path);
 	if ($root == null || $root['upload'] == 'no')
-	{
-		$info_msg = 'Upload not allowed in this directory';
-		$info_feather = 'slash';
-		$info_level = 'danger';
-	}
+		$info -> set ([
+			'msg' => 'Upload not allowed in this directory',
+			'feather' => 'slash',
+			'level' => 'danger'
+		]);
 	else
 	{
 		$name = $_FILES["fileToUpload"]["name"];
@@ -191,27 +193,27 @@ if ($action == 'upload')
 		$ext  = strtolower(pathinfo($name,PATHINFO_EXTENSION));
 
 		if (strlen ($name) == 0)
-		{
-			$info_msg = 'No file selected for upload';
-			$info_level = 'warning';
-			$info_feather = 'slash';
-		}
+			$info -> set ([
+				'msg' => 'No file selected for upload',
+				'level' => 'warning',
+				'feather' => 'slash'
+			]);
 		else
 		{
 			$target_file = $path . '/' . $name;
 
 			if (move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file))
-			{
-				$info_msg = 'File successfuly uploaded';
-				$info_level = 'success';
-				$info_feather = 'check-circle';
-			}
+				$info -> set ([
+					'msg' => 'File successfuly uploaded',
+					'level' => 'success',
+					'feather' => 'check-circle'
+				]);
 			else
-			{
-				$info_msg = 'Upload failure';
-				$info_level = 'danger';
-				$info_feather = 'alert-triangle';
-			}
+				$info -> set ([
+					'msg' => 'Upload failure',
+					'level' => 'danger',
+					'feather' => 'alert-triangle'
+				]);
 		}
 	}
 }
@@ -226,24 +228,27 @@ if ($action == 'confirm-delete')
 
 	$root = get_volume ($path);
 	if ($root == null || $root['delete'] == 'no')
-	{
-		$info_msg = 'Deletion is not allowed in this directory';
-		$info_feather = 'slash';
-		$info_level = 'danger';
-	}
+		$info -> set ([
+			'msg' => 'Deletion is not allowed in this directory',
+			'feather' => 'slash',
+			'level' => 'danger'
+		]);
 	else
 	{
-		$info_msg = 'Delete ' . htmlentities($file) . ' ?';
-		$info_feather = 'help-circle';
-
 		global $pageno;
 		$no_link = make_link ([ 'page'=>$pageno+1 ]);
 		$yes_link = make_link ([ 'page'=>$pageno+1, 'file' => $file, 'action' => 'delete' ]);
 
-		$info_buttons[] = '<a class="btn btn-primary" href="'.$yes_link.'" role="button">Yes</a>';
-		$info_buttons[] = '<a class="btn btn-primary" href="'.$no_link.'" role="button">No</a>';
+		$buttons = [ ];
+		$buttons[] = '<a class="btn btn-primary" href="'.$yes_link.'" role="button">Yes</a>';
+		$buttons[] = '<a class="btn btn-primary" href="'.$no_link.'" role="button">No</a>';
 
-		$info_level = 'warning';
+		$info -> set ([
+			'msg' => 'Delete ' . $file . ' ?', // TODO: utf8_encode
+			'feather' => 'help-circle',
+			'level' => 'warning',
+			'buttons' => $buttons
+		]);
 	}
 }
 
@@ -256,30 +261,25 @@ if ($action == 'delete')
 	set_path();
 	$root = get_volume ($path);
 	if ($root == null || $root['delete'] == 'no')
-	{
-		$info_msg = 'This action is not allowed';
-		$info_feather = 'slash';
-		$info_level = 'danger';
-	}
+		$info -> set ([
+			'msg' => 'This action is not allowed',
+			'feather' => 'slash',
+			'level' => 'danger'
+		]);
 	else
 	{
 		if (@unlink($pathname))
-		{
-			$info_msg = 'File ' .$file. ' deleted';
-			$info_level = 'success';
-			$info_feather = 'check-circle';
-		}
+			$info -> set ([
+				'msg' => 'File ' .$file. ' deleted', // TODO: utf8_encode
+				'level' =>  'success',
+				'feather' => 'check-circle'
+			]);
 		else
-		{
-			$info_msg = 'Deletion failed';
-			$info_level = 'danger';
-			$info_feather = 'alert-triangle';
-		}
-
-		/*
-		$info_msg = 'Deletion not implemented yet';
-		$info_level = 'warning';
-		*/
+			$info -> set ([
+				'msg' => 'Deletion failed',
+				'level' => 'danger',
+				'feather' => 'alert-triangle'
+			]);
 	}
 }
 
@@ -298,8 +298,12 @@ if ($action == 'export')
 		csv_to_stdout ($path); 
 		die();
 	}
-	$info_level = 'danger';
-	$info_msg   = 'Operation not permitted';
+
+	$info -> set ([
+		'level' => 'danger',
+		'feather' => 'slash',
+		'msg' => 'Operation not permitted'
+	]);
 }
 //==============================================================
 // Download a file
@@ -313,12 +317,16 @@ if ($action == 'download')
 		header('Content-Type: application/octet-stream');
 		header("Content-Transfer-Encoding: Binary"); 
 		header("Content-disposition: attachment; filename=\"" . $file . "\""); 
+		header("Content-Length: " . filesize($pathname));
 		readfile($pathname); 
 		die();
 	}
 
-	$info_level = 'danger';
-	$info_msg   = 'Operation not permitted in '.$path;
+	$info -> set ([
+		'level' => 'danger',
+		'feather' => 'slash',
+		'msg' => 'Operation not permitted'
+	]);
 }
 
 //==============================================================
@@ -341,35 +349,6 @@ set_orderby(): void
 		$order = 'asc';
 }
 
-// from  https://www.php.net/manual/fr/function.realpath.php
-// similar to realpath()
-// but always returns info, even if file is non-existent
-// realpath with return an empty string if file does not exists
-function get_absolute_path($path) {
-        $path = str_replace(array('/', '\\'), DIRECTORY_SEPARATOR, $path);
-        $parts = array_filter(explode(DIRECTORY_SEPARATOR, $path), 'strlen');
-        $absolutes = array();
-        foreach ($parts as $part) {
-            if ('.' == $part) continue;
-            if ('..' == $part) {
-                array_pop($absolutes);
-            } else {
-                $absolutes[] = $part;
-            }
-        }
-        return DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $absolutes);
-    }
-
-// basename() relies on locale
-// this function does not
-function
-get_basename (string $pathname): string
-{
-        $pathname = str_replace(array('/', '\\'), DIRECTORY_SEPARATOR, $pathname);
-	$parts = explode (DIRECTORY_SEPARATOR, $pathname);
-	return array_pop ($parts);
-}
-
 // this function sets $path, $file and $pathname globals
 // from $_GET parameters
 // whatever the parameters (relative, absolute, with path in filename etc.)
@@ -379,7 +358,7 @@ get_basename (string $pathname): string
 function
 set_path(string $origin = 'GET'): void
 {
-	global $path, $queried_path, $file, $pathname, $errmsg, $errlevel, $feather;
+	global $path, $queried_path, $file, $pathname, $error;
 
 	$path = $file = '';
 
@@ -392,8 +371,10 @@ set_path(string $origin = 'GET'): void
 		$from = $_POST;
 		break;
 	default :
-		$errmsg = 'Invalid origin';
-		$feather = 'alert-triangle';
+		$error -> set ([
+			'msg' => 'Invalid origin',
+			'feather' => 'alert-triangle'
+		]);
 		return;
 	}
 
@@ -418,17 +399,18 @@ set_path(string $origin = 'GET'): void
 		// filename=../../etc/password (unauthorized)
 
 		// here :
-		// get_absolute_path('/home/mydir/../../etc/passwd'): /etc/passwd
-		// path: /etc
-		// file: passwd
+		// new filename('/home/mydir/../../etc/passwd')
+		// get_real_pathname(): /etc/passwd
+		// get_dirname(): /etc
+		// get_basename(): passwd
 
 		$pathname = $path . '/' . $file;
-		$pathname = get_absolute_path ($pathname);
+		$p = new filename ($pathname);
 
 		// pathname uses native fs encoding (might not be suitable for display)
 
-		$path = dirname($pathname);
-		$file = get_basename($pathname);
+		$path = $p -> get_dirname();
+		$file = $p -> get_basename();
 
 /*
 echo 'real pathname: ' . $pathname . '<br>' . "\n";
@@ -440,15 +422,16 @@ die();
 	}
 	else // no, path only
 	{
-		$path = get_absolute_path($path);
+		$p = new filename ($path);
+		$path = $p -> get_real_pathname($path);
 	}
 
 	if ($path == '')
-	{
-		$errmsg = 'Cannot read directory'; // use same message for non-exitent and unreadable
-		$errlevel = 'danger';
-		$feather = 'alert-triangle';
-	}
+		$error -> set ([
+			'msg' => 'Cannot read directory', // use same message for non-exitent and unreadable
+			'level' => 'danger',
+			'feather' => 'alert-triangle'
+		]);
 }
 
 // set pageno from $_GET array
@@ -550,21 +533,26 @@ csv_to_stdout (string $path): void
 function
 authenticate (): void
 {
-	global $info_msg, $info_level, $info_feather;
+	global $info;
 	global $conf;
+	global $session;
 
 	if (!array_key_exists ('login', $_POST) || ($_POST['login'] == ''))
 	{
-		$info_msg = 'Empty login';
-		$info_level = 'danger';
-		$info_feather = '';
+		$info -> set ([
+			'msg' => 'Empty login',
+			'level' => 'danger',
+			'feather' => ''
+		]);
 		return;
 	}
 	if (!array_key_exists ('password', $_POST) || ($_POST['password'] == ''))
 	{
-		$info_msg = 'Empty password';
-		$info_level = 'danger';
-		$info_feather = '';
+		$info -> set ([
+			'msg' => 'Empty password',
+			'level' => 'danger',
+			'feather' => ''
+		]);
 		return;
 	}
 
@@ -573,18 +561,22 @@ authenticate (): void
 
 	if (!function_exists ('ldap_connect'))
 	{
-		$info_msg = 'missing function ldap_connect(), please review PHP configuration';
-		$info_level = 'danger';
-		$info_feather = 'alert-triangle';
+		$info -> set ([
+			'msg' => 'missing function ldap_connect(), please review PHP configuration',
+			'level' => 'danger',
+			'feather' => 'alert-triangle'
+		]);
 		return;
 	}
 
 	$ldapconn = ldap_connect($conf['ldap']['server'],$conf['ldap']['port']);
 	if (!$ldapconn)
 	{
-		$info_msg = 'Cannot connect to LDAP server (' . $conf['ldap']['server'] . ')';
-		$info_level = 'danger';
-		$info_feather = 'alert-triangle';
+		$info -> set ([
+			'msg' => 'Cannot connect to LDAP server (' . $conf['ldap']['server'] . ')',
+			'level' => 'danger',
+			'feather' => 'alert-triangle'
+		]);
 		return;
 	}
 
@@ -599,13 +591,13 @@ authenticate (): void
 	ldap_close($ldapconn);
 
 	if ($lb === true)	// LDAP - OK
-		login_as ($login);
+		$session -> setLogin ($login);
 	else
-	{
-		$info_msg = 'Invalid credential';
-		$info_level = 'danger';
-		$info_feather = 'slash';
-	}
+		$info -> set ([
+			'msg' => 'Invalid credential',
+			'level' => 'danger',
+			'feather' => 'slash'
+		]);
 }
 
 function
@@ -620,7 +612,7 @@ send_html_head(): void
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="">
     <meta name="author" content="">
-    <link rel="icon" href="folder.png" />
+    <link rel="icon" href="images/folder.png" />
 
     <title>File browsing '.$ver.'</title>
 
@@ -631,7 +623,7 @@ send_html_head(): void
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
 <?php } ?>
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
-<link rel="stylesheet" href="filebrowser.css">
+<link rel="stylesheet" href="css/filebrowser.css">
 
   </head>
 ';
@@ -737,8 +729,8 @@ is_dir_allowed (string $path): bool
 function
 get_dir_content (): void
 {
-	global $errmsg, $conf, $path, $errlevel;
 	global $total_size_used;
+	global $conf;
 	global $files;
 
 	$files = [];
@@ -784,28 +776,22 @@ get_dir_content (): void
 function
 parse_dir (): void
 {
-	global $errmsg, $feather, $conf, $path, $files, $errlevel, $queried_path;
-
-	//-------------------
-	// Determines real pathname
-	// Changes /toto/titi/../tutu to /toto/tutu
-	// if target does not exists, path equals to empty string
-	// (might exists and not a directory)
-	//-------------------
+	global $error;
+	global $conf, $path, $files, $queried_path;
 
 	if ($path == '')
 	{
 		if ($queried_path == '')
-		{
-			$errmsg = 'Please select a directory';
-			$errlevel = 'info';
-		}
+			$error -> set ([
+				'msg' => 'Please select a directory',
+				'level' => 'info'
+			]);
 		else
-		{
-			$errmsg = 'Not a valid directory';
-			$errlevel = 'danger';
-			$feather = 'alert-triangle';
-		}
+			$error -> set ([
+				'msg' => 'Not a valid directory',
+				'level' => 'danger',
+				'feather' => 'alert-triangle'
+			]);
 		return;
 	}
 
@@ -817,9 +803,11 @@ parse_dir (): void
 	$root = get_volume ($path);
 	if ($root == null)
 	{
-		$errmsg = 'You are not allowed to view this directory ('.$path.')';
-		$errlevel = 'danger';
-		$feather = 'slash';
+		$error -> set ([
+			'msg' => 'You are not allowed to view this directory ('.$path.')', // TODO: utf8
+			'level' =>  'danger',
+			'feather' => 'slash'
+		]);
 		return;
 	}
 
@@ -829,9 +817,11 @@ parse_dir (): void
 
 	if (!is_dir ($path))
 	{
-		$errmsg = 'Not a directory';
-		$errlevel = 'danger';
-		$feather = 'slash';
+		$error -> set ([
+			'msg' => 'Not a directory',
+			'level' => 'danger',
+			'feather' => 'slash'
+		]);
 		return;
 	}
 
@@ -848,9 +838,11 @@ parse_dir (): void
 	$dh = opendir ($path);
 	if (!$dh)
 	{
-		$errmsg = 'Cannot read directory'; // use same message for non-exitent and unreadable
-		$errlevel = 'danger';
-		$feather = 'alert-triangle';
+		$error -> set ([
+			'msg' => 'Cannot read directory', // use same message for non-exitent and unreadable
+			'level' => 'danger',
+			'feather' => 'alert-triangle'
+		]);
 		return;
 	}
 
@@ -914,9 +906,10 @@ parse_dir (): void
 		{
 			$linktarget = readlink ($pathname);
 			if (substr($linktarget,0,1) == '/')
-				$a['target'] = $linktarget;
+				$p = new filename ($linktarget);
 			else
-				$a['target'] = get_absolute_path($path . '/' . $linktarget);
+				$p = new filename ($path . '/' . $linktarget);
+			$a['target'] = $p -> get_real_pathname();
 		}
 		$files[$i++] = $a;
 	}
@@ -964,8 +957,8 @@ show_login_form(): void
 	<form class="form-signin" data-bitwarden-watching="1" method="POST" action="index.php">
 	';
 
-	global $info_msg, $info_level, $info_feather;
-	display_error ($info_msg, $info_level, $info_feather);
+	global $info;
+	$info -> display();
 
 	echo '
       <h1 class="h3 mb-3 font-weight-normal">Please sign in</h1>
@@ -1324,33 +1317,6 @@ csv_button (): string
 //----------------------------------------------------------
 
 function
-display_error (string $msg, string $level = 'danger', string $feather = '', array $buttons = null): void
-{
-	if ($msg == '')
-		return;
-
-?>
-	<div class="alert alert-<?=$level ?>" role="alert">
-<?php
-	if ($feather != '')
-		echo '<span class="feather-32" data-feather="'.$feather.'"></span>';
-?>
-	  <div class="align-middle message"><?=htmlentities($msg) ?></div>
-<?php
-	if ($buttons != null)
-	{
-		echo '&nbsp;';
-		echo '&nbsp;';
-		echo '&nbsp;';
-		foreach ($buttons as $button)
-			echo $button . '&nbsp;';
-	}
-?>
-	</div>
-<?php
-}
-
-function
 starts_with (string $str, string $start): bool
 {
 	return (substr ($str, 0, strlen($start)) == $start);
@@ -1480,25 +1446,6 @@ if ($root['upload'] == 'yes')
 	$footer .= '  ' . upload_button();
 }
 
-function
-session_is_valid(): bool
-{
-	return array_key_exists ('filebrowseruser', $_SESSION)
-		&& ($_SESSION['filebrowseruser'] != '');
-}
-
-function
-session_invalidate(): void
-{
-	unset ($_SESSION['filebrowseruser']);
-}
-
-function
-login_as (string $username): void
-{
-	$_SESSION['filebrowseruser'] = $username; // make session valid
-}
-
 //==========================================================
 // MAIN
 //==========================================================
@@ -1589,7 +1536,7 @@ if ($conf['auth'] == 'ldap') {
               <li class="nav-item ">
                 <a class="nav-link" href="?action=logout" title="Logout">
                   <span data-feather="log-out"></span>
-                  Logout <?=$_SESSION['filebrowseruser'] ?>
+                  Logout <?=$session -> getLogin() ?>
                 </a>
               </li>
 <?php
@@ -1603,7 +1550,7 @@ if ($conf['auth'] == 'ldap') {
         <main role="main" class="col-md-9 ml-sm-auto col-lg-10 pt-3 px-4">
 
 <?php
-	display_error($info_msg, $info_level, $info_feather, $info_buttons);
+	$info -> display();
 ?>
 
 <?php if ($path != '') { ?>
@@ -1650,8 +1597,8 @@ if ($conf['auth'] == 'ldap') {
 	<div>
 <?php } // path != '' ?>
 <?php
-	if ($errmsg != '')
-		display_error ($errmsg, $errlevel, $feather);
+	if ($error -> getMsg() != '')
+		$error -> display();
 	else
 		if ($action == 'upload-form')
 			display_upload_form ();
