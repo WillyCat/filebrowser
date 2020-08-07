@@ -512,8 +512,6 @@ authenticate (): void
 	global $info_msg, $info_level, $info_feather;
 	global $conf;
 
-	$login = $_POST['login'];
-
 	if (!array_key_exists ('login', $_POST) || ($_POST['login'] == ''))
 	{
 		$info_msg = 'Empty login';
@@ -528,6 +526,8 @@ authenticate (): void
 		$info_feather = '';
 		return;
 	}
+
+	$login = $_POST['login'];
 	$password = $_POST['password'];
 
 	if (!function_exists ('ldap_connect'))
