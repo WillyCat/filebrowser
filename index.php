@@ -11,8 +11,8 @@
 
 $use_dropdowns = 0;	// dropdown require bootstrap.js + popper.js - if not used, have lighter footprint by not importing them
 
-$path = '';   // current directory
-$file = 0;
+$path = '';   // dir in FS encoding
+$file = 0; // file in FS encoding
 $page = 0;
 $action = '';
 
@@ -291,7 +291,7 @@ if ($action == 'export')
 	set_path();
 	if ($conf['csv']['enabled'] == 'yes' && is_dir_allowed ($path))
 	{
-		$filename = basename ($path) . '.csv';
+		$filename = get_basename ($path) . '.csv';
 		header('Content-Type: application/octet-stream');
 		header("Content-Transfer-Encoding: Binary"); 
 		header("Content-disposition: attachment; filename=\"" . $filename . "\""); 
@@ -318,7 +318,7 @@ if ($action == 'download')
 	}
 
 	$info_level = 'danger';
-	$info_msg   = 'Operation not permitted';
+	$info_msg   = 'Operation not permitted in '.$path;
 }
 
 //==============================================================
@@ -341,6 +341,35 @@ set_orderby(): void
 		$order = 'asc';
 }
 
+// from  https://www.php.net/manual/fr/function.realpath.php
+// similar to realpath()
+// but always returns info, even if file is non-existent
+// realpath with return an empty string if file does not exists
+function get_absolute_path($path) {
+        $path = str_replace(array('/', '\\'), DIRECTORY_SEPARATOR, $path);
+        $parts = array_filter(explode(DIRECTORY_SEPARATOR, $path), 'strlen');
+        $absolutes = array();
+        foreach ($parts as $part) {
+            if ('.' == $part) continue;
+            if ('..' == $part) {
+                array_pop($absolutes);
+            } else {
+                $absolutes[] = $part;
+            }
+        }
+        return DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $absolutes);
+    }
+
+// basename() relies on locale
+// this function does not
+function
+get_basename (string $pathname): string
+{
+        $pathname = str_replace(array('/', '\\'), DIRECTORY_SEPARATOR, $pathname);
+	$parts = explode (DIRECTORY_SEPARATOR, $pathname);
+	return array_pop ($parts);
+}
+
 // this function sets $path, $file and $pathname globals
 // from $_GET parameters
 // whatever the parameters (relative, absolute, with path in filename etc.)
@@ -348,7 +377,7 @@ set_orderby(): void
 // this is important so to avoid bypassing configured permissions
 
 function
-set_path(string $origin = 'GET')
+set_path(string $origin = 'GET'): void
 {
 	global $path, $queried_path, $file, $pathname, $errmsg, $errlevel, $feather;
 
@@ -389,17 +418,29 @@ set_path(string $origin = 'GET')
 		// filename=../../etc/password (unauthorized)
 
 		// here :
-		// realpath('/home/mydir/../../etc/passwd'): /etc/passwd
+		// get_absolute_path('/home/mydir/../../etc/passwd'): /etc/passwd
 		// path: /etc
 		// file: passwd
 
-		$pathname = realpath($path . '/' . $file);
+		$pathname = $path . '/' . $file;
+		$pathname = get_absolute_path ($pathname);
+
+		// pathname uses native fs encoding (might not be suitable for display)
+
 		$path = dirname($pathname);
-		$file = basename($pathname);
+		$file = get_basename($pathname);
+
+/*
+echo 'real pathname: ' . $pathname . '<br>' . "\n";
+echo 'exists: ' . (file_exists($pathname) ? 'yes' : 'no') . '<br>' . "\n";
+echo 'path: ' . $path . '<br>';
+echo 'file: ' . $file . '<br>';
+die();
+*/
 	}
 	else // no, path only
 	{
-		$path = realpath($path); // returns '' is non-existent
+		$path = get_absolute_path($path);
 	}
 
 	if ($path == '')
@@ -480,7 +521,7 @@ csv_to_stdout (string $path): void
 			switch ($column)
 			{
 			case 'Filename' :
-				echo $file['name'];
+				echo $file['name-8859-1'];
 				break;
 			case 'Size' :
 				if ($file['type'] == 'file')
@@ -829,10 +870,23 @@ parse_dir (): void
 		$pathname = $path . '/' . $file;
 
 		$a = [ ];
+
+		// name => FS encoding (can be used to access file)
+		// name-utf8 => UTF-8 (can be used for HTML display)
+		// name-8859-1 => iso-8859-1 (can be used for CSV export)
+
+		$a['name'] = $file; // local encoding
 		if ($root['encoding'] == 'iso-8859-1')
-			$a['name'] = utf8_encode($file);
+		{
+			$a['name-8859-1'] = $file;
+			$a['name-utf8'] = utf8_encode($file);
+		}
 		else
-			$a['name'] = $file;
+		{
+			$a['name-utf8'] = $file;
+			$a['name-8859-1'] = utf8_decode ($file);
+		}
+
 		$a['type'] = @filetype ($pathname);
 		if ($a['type'] == 'file')
 		{
@@ -862,7 +916,7 @@ parse_dir (): void
 			if (substr($linktarget,0,1) == '/')
 				$a['target'] = $linktarget;
 			else
-				$a['target'] = realpath($path . '/' . $linktarget);
+				$a['target'] = get_absolute_path($path . '/' . $linktarget);
 		}
 		$files[$i++] = $a;
 	}
@@ -939,7 +993,7 @@ show_login_form(): void
 	if ($action != '')
 		echo '<input type="hidden" action="' . $action . '">' . "\n";
 */
-	echo '<input type="hidden" action="login">';
+	echo '<input type="hidden" name="action" value="login">';
 
 	echo ' </form> </body> </html>';
 }
@@ -1016,18 +1070,18 @@ display_column (array $file, string $column, array $root): void
 	case 'Filename' :
 		if ($file['type'] == 'dir')
 		{
-			echo '<a href="?path='.$path.'/' . $file['name'].'">';
+			echo '<a href="' . make_link([ 'path' => $path. '/' . $file['name'] ]) . '">';
 			$a_open = true;
 		}
 
 		if ($file['type'] == 'link')
 			if (is_dir ($file['target']))
 			{
-				echo '<a href="?path='.$file['target'].'" title="'.$file['target'].'">';
+				echo '<a href="' . make_path([ 'path' => $file['target']]) .'" title="'.$file['target'].'">';
 				$a_open = true;
 			}
 
-		echo htmlentities($file['name']);
+		echo htmlentities($file['name-utf8']);
 		if ($file['type'] == 'dir')
 			echo '/';
 		break;
@@ -1578,8 +1632,17 @@ if ($conf['auth'] == 'ldap') {
 		if ($dirlevel == '')
 			continue;
 		$linkpath .= '/' . $dirlevel;
+
+		// get_volume() has to be called at each level
+		// as encoding can change due to mount points with different encodings
+		$root = get_volume ($linkpath);
+		if ($root['encoding'] == 'iso-8859-1')
+			$dirlevel_utf8 = utf8_encode($dirlevel);
+		else
+			$dirlevel_utf8 = $dirlevel;
+
 		$link = make_link ([ 'page' => 1, 'path' => $linkpath ]);
-		echo '<li class="breadcrumb-item"><A HREF="' . $link . '" title="'.$linkpath.'">' . $dirlevel . '</a></li>';
+		echo '<li class="breadcrumb-item"><A HREF="' . $link . '" title="'.$linkpath.'">' . $dirlevel_utf8 . '</a></li>';
 	}
 	?>
 	</ul>
