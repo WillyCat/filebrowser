@@ -54,3 +54,5 @@ Date        Version  Changement
                      Added favicon (from stockio free icons)
 2020-08-06     1.14  Code refactoring
 2020-08-07     1.15  Moved code to message.class.php, filename.class.php, session.class.php
+                     New directory /var/www/classes for php classes
+                     Moved filebrowser.css to css/ subdirectory
