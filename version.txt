@@ -56,3 +56,5 @@ Date        Version  Changement
 2020-08-07     1.15  Moved code to message.class.php, filename.class.php, session.class.php
                      New directory /var/www/classes for php classes
                      Moved filebrowser.css to css/ subdirectory
+2020-08-08     1.16  Filtering on file types (dir, files)
+                     CSS for checkboxes from https://bootsnipp.com/partha2u

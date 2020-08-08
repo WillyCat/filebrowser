@@ -12,10 +12,16 @@ require_once '../classes/session.class.php';
 // login, password
 // action (upload)
 
+$filters = [
+	'showfiles'=> [ 'label' => 'Files', 'value' => true ],
+	'showdir'=>['label' => 'Directories', 'value' => true ]
+];
+
 $use_dropdowns = 0;	// dropdown require bootstrap.js + popper.js - if not used, have lighter footprint by not importing them
 
 $path = '';   // dir in FS encoding
 $file = 0; // file in FS encoding
+$root = ''; // volume to be considered for $path
 $page = 0;
 $action = '';
 
@@ -86,7 +92,8 @@ foreach ($conf['volumes'] as $key => $value)
 		$conf['volumes'][$key]['showhiddenfiles'] = 'no';
 }
 
-date_default_timezone_set($conf['tz']);
+if (array_key_exists ('tz', $conf))
+	date_default_timezone_set($conf['tz']);
 
 //----------------------------------
 // Session management
@@ -98,7 +105,7 @@ if ($action == 'logout')
 
 // if changing auth method to ldap, sessions already open
 // and gained with no auth are no longer valid
-if ($session -> getLogin() == 'anonymous' && $conf['auth'] == 'ldap')
+if ($session -> is_valid() && $session -> getLogin() == 'anonymous' && $conf['auth'] == 'ldap')
 	$session -> invalidate();
 
 if (!$session -> is_valid())
@@ -134,17 +141,17 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 	else
 		$bookmarks = [ ];
 
-	if ($aaction == 'bookmark')
+	if ($action == 'bookmark')
 	{
 		set_path();
 		if (is_dir_allowed ($path))
 		{
-			$info_level = 'success';
 			if (in_array ($path, $bookmarks))
 			{
 				$info -> set ([
 					'msg'  => 'Bookmark removed',
-					'feather' => 'check-circle'
+					'feather' => 'check-circle',
+					'level' => 'success'
 				]);
 
 				if (($key = array_search($path, $bookmarks)) !== false)
@@ -161,7 +168,8 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 				{
 					$info -> set ([
 						'msg' => 'Bookmark added',
-						'feather' =>  'check-circle'
+						'feather' =>  'check-circle',
+						'level' => 'success'
 					]);
 
 					$bookmarks[] = $path;
@@ -179,7 +187,6 @@ if ($action == 'upload')
 {
 	set_path('POST');
 
-	$root = get_volume ($path);
 	if ($root == null || $root['upload'] == 'no')
 		$info -> set ([
 			'msg' => 'Upload not allowed in this directory',
@@ -226,7 +233,6 @@ if ($action == 'confirm-delete')
 	set_path();
 	set_pageno();
 
-	$root = get_volume ($path);
 	if ($root == null || $root['delete'] == 'no')
 		$info -> set ([
 			'msg' => 'Deletion is not allowed in this directory',
@@ -259,7 +265,6 @@ if ($action == 'confirm-delete')
 if ($action == 'delete')
 {
 	set_path();
-	$root = get_volume ($path);
 	if ($root == null || $root['delete'] == 'no')
 		$info -> set ([
 			'msg' => 'This action is not allowed',
@@ -311,7 +316,6 @@ if ($action == 'export')
 if ($action == 'download')
 {
 	set_path();
-	$root = get_volume ($path);
 	if ($root != null && $root['download'] == 'yes')
 	{
 		header('Content-Type: application/octet-stream');
@@ -349,6 +353,18 @@ set_orderby(): void
 		$order = 'asc';
 }
 
+function
+set_filters(): void
+{
+	global $filters;
+
+	foreach ($filters as $filtername=>$filter)
+		if (array_key_exists ($filtername, $_GET))
+			$filters[$filtername]['value'] = ($_GET[$filtername] == '1');
+		else
+			$filters[$filtername]['value'] = true;
+}
+
 // this function sets $path, $file and $pathname globals
 // from $_GET parameters
 // whatever the parameters (relative, absolute, with path in filename etc.)
@@ -373,6 +389,7 @@ set_path(string $origin = 'GET'): void
 	default :
 		$error -> set ([
 			'msg' => 'Invalid origin',
+			'level' => 'danger',
 			'feather' => 'alert-triangle'
 		]);
 		return;
@@ -426,12 +443,16 @@ die();
 		$path = $p -> get_real_pathname($path);
 	}
 
+/*
 	if ($path == '')
 		$error -> set ([
 			'msg' => 'Cannot read directory', // use same message for non-exitent and unreadable
 			'level' => 'danger',
 			'feather' => 'alert-triangle'
 		]);
+*/
+	global $root;
+	$root = get_volume ($path);
 }
 
 // set pageno from $_GET array
@@ -440,7 +461,7 @@ set_pageno(): void
 {
 	global $pageno, $nbpages;
 
-	if (array_key_exists ('page', $_GET))
+	if (array_key_exists ('page', $_GET) && is_numeric($_GET['page']))
 		$pageno = ($_GET['page'] - 1);
 	else
 		$pageno = 0;
@@ -624,6 +645,7 @@ send_html_head(): void
 <?php } ?>
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
 <link rel="stylesheet" href="css/filebrowser.css">
+<link rel="stylesheet" href="css/check-box.css">
 
   </head>
 ';
@@ -778,29 +800,14 @@ parse_dir (): void
 {
 	global $error;
 	global $conf, $path, $files, $queried_path;
-
-	if ($path == '')
-	{
-		if ($queried_path == '')
-			$error -> set ([
-				'msg' => 'Please select a directory',
-				'level' => 'info'
-			]);
-		else
-			$error -> set ([
-				'msg' => 'Not a valid directory',
-				'level' => 'danger',
-				'feather' => 'alert-triangle'
-			]);
-		return;
-	}
+	global $root;
+	global $filters;
 
 	//-------------------
 	// checks is the user is allowed to display this directory
 	// it is allowed only if it is below one of its allowed roots
 	//-------------------
 
-	$root = get_volume ($path);
 	if ($root == null)
 	{
 		$error -> set ([
@@ -911,6 +918,12 @@ parse_dir (): void
 				$p = new filename ($path . '/' . $linktarget);
 			$a['target'] = $p -> get_real_pathname();
 		}
+
+		if ($a['type'] == 'dir' && !$filters['showdir']['value'])
+			continue;
+		if ($a['type'] == 'file' && !$filters['showfiles']['value'])
+			continue;
+
 		$files[$i++] = $a;
 	}
 	closedir ($dh);
@@ -1144,6 +1157,12 @@ make_link (array $parms): string
 	if ($parms['path'] == '')
 		$parms['path'] = $path;
 
+	// if not set to a special value, then re use current parms
+	global $filters;
+	foreach ($filters as $filtername=>$filter)
+		if (!array_key_exists ($filtername, $parms))
+			$parms[$filtername] = ($filters[$filtername]['value'] ? '1' : '0' );
+
 	// encode each part
 	$urlparts = [ ];
 	foreach ($parms as $key => $value)
@@ -1175,8 +1194,8 @@ function
 show_pagination (int $pageno_active, int $nbpages): void
 {
 	// no paginate if only 1 page
-	if ($nbpages < 2)
-		return;
+	//if ($nbpages < 2)
+		//return;
 
 	$large = 10;
 
@@ -1227,6 +1246,40 @@ show_pagination_large (int $pageno_active, int $nbpages): void
 </form>
 
 <?php
+}
+
+function
+display_checkbox ($parms): void
+{
+	echo build_checkbox($parms);
+}
+
+// label, name, checked, id
+function
+build_checkbox(array $parms): string
+{
+	if ($parms['checked'])
+	{
+		$checked = 'checked';
+		$new_value = 0;
+	}
+	else
+	{
+		$checked = '';
+		$new_value = 1;
+	}
+
+	$js_link = make_js_link([ 'page' => 1, $parms['name'] => $new_value ]);
+
+	return '
+	<div class="checkbox checbox-switch switch-primary">
+	    <label>
+		<input type="checkbox" name="'.$parms['name'].'" '.$checked.' onChange="'.$js_link.'" />
+		<span></span>
+		' . $parms['label'] . '
+	    </label>
+	</div>
+	';
 }
 
 function
@@ -1346,6 +1399,90 @@ display_upload_form(): void
 }
 
 function
+show_breadcrumb(): void
+{
+	global $path, $pageno, $conf;
+
+	if ($path == '')
+		return;
+?>
+	<div>
+	<ul class="breadcrumb">
+	<?php
+	$dirparts = explode ('/' , $path);
+	$linkpath = '';
+	echo '<li class="breadcrumb-item">';
+	if ($conf['bookmarks']['enabled'] == 'yes')
+	{
+		echo '<A HREF="'.make_link([
+			'page' => $pageno+1,
+			'action' => 'bookmark'
+		]).'" title="Bookmark this directory">';
+		echo '<span';
+		echo ' class="clickable"';
+		echo ' data-feather="bookmark"';
+		echo '>';
+		echo '</span>';
+		echo '</a>';
+	}
+	echo '</li>';
+	foreach ($dirparts as $dirlevel)
+	{
+		if ($dirlevel == '')
+			continue;
+		$linkpath .= '/' . $dirlevel;
+
+		// get_volume() has to be called at each level
+		// as encoding can change due to mount points with different encodings
+		$root = get_volume ($linkpath);
+		if ($root['encoding'] == 'iso-8859-1')
+			$dirlevel_utf8 = utf8_encode($dirlevel);
+		else
+			$dirlevel_utf8 = $dirlevel;
+
+		$link = make_link ([ 'page' => 1, 'path' => $linkpath ]);
+		echo '<li class="breadcrumb-item"><A HREF="' . $link . '" title="'.$linkpath.'">' . $dirlevel_utf8 . '</a></li>';
+	}
+	?>
+	</ul>
+	</div>
+<?php
+}
+
+function
+display_checkboxes_and_pagination(): void
+{
+	global $filters;
+	global $pageno, $nbpages;
+?>
+<div class="">
+  <div class="row justify-content-around">
+<?php
+	foreach ($filters as $filtername=>$filter)
+	{
+?>
+    <div class="col-md-auto">
+      <?= display_checkbox([
+	'label' => $filter['label'],
+	'name' => $filtername,
+	'checked' => $filter['value'],
+	'id' => $filtername
+	]); ?>
+    </div>
+<?php
+	}
+?>
+
+    <div class="col-sm">
+	<?php show_pagination ($pageno, $nbpages); ?>
+    </div>
+
+  </div>
+</div>
+<?php
+}
+
+function
 display_files (): void
 {
 	global $path;
@@ -1353,9 +1490,7 @@ display_files (): void
 	global $pageno, $nbpages;
 	global $order, $orderby;
 
-	echo '<div>';
-	show_pagination ($pageno, $nbpages);
-	echo '</div>';
+	display_checkboxes_and_pagination();
 
 	global $conf;
 	$columns = $conf['display']['columns'];
@@ -1453,10 +1588,20 @@ if ($root['upload'] == 'yes')
 $debugstr = '';
 if ($path == '')
 	set_path();
-//if ($path == '')
-	//$path = $default_dir;
-get_dir_content ();
-set_pageno();
+if ($path == '')
+{
+	$error -> set ([
+		'msg' => 'Please select a directory',
+		'level' => 'info'
+	]);
+}
+else
+{
+	set_filters();
+	get_dir_content ();
+	set_pageno();
+}
+
 send_html_head();
 ?>
 
@@ -1551,51 +1696,9 @@ if ($conf['auth'] == 'ldap') {
 
 <?php
 	$info -> display();
+	show_breadcrumb();
 ?>
-
-<?php if ($path != '') { ?>
 	<div>
-	<ul class="breadcrumb">
-	<?php
-	$dirparts = explode ('/' , $path);
-	$linkpath = '';
-	echo '<li class="breadcrumb-item">';
-	if ($conf['bookmarks']['enabled'] == 'yes')
-	{
-		echo '<A HREF="'.make_link([
-			'page' => $pageno+1,
-			'action' => 'bookmark'
-		]).'" title="Bookmark this directory">';
-		echo '<span';
-		echo ' class="clickable"';
-		echo ' data-feather="bookmark"';
-		echo '>';
-		echo '</span>';
-		echo '</a>';
-	}
-	echo '</li>';
-	foreach ($dirparts as $dirlevel)
-	{
-		if ($dirlevel == '')
-			continue;
-		$linkpath .= '/' . $dirlevel;
-
-		// get_volume() has to be called at each level
-		// as encoding can change due to mount points with different encodings
-		$root = get_volume ($linkpath);
-		if ($root['encoding'] == 'iso-8859-1')
-			$dirlevel_utf8 = utf8_encode($dirlevel);
-		else
-			$dirlevel_utf8 = $dirlevel;
-
-		$link = make_link ([ 'page' => 1, 'path' => $linkpath ]);
-		echo '<li class="breadcrumb-item"><A HREF="' . $link . '" title="'.$linkpath.'">' . $dirlevel_utf8 . '</a></li>';
-	}
-	?>
-	</ul>
-	</div>
-	<div>
-<?php } // path != '' ?>
 <?php
 	if ($error -> getMsg() != '')
 		$error -> display();

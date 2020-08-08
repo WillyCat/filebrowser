@@ -6,7 +6,6 @@ RUN \
     docker-php-ext-configure ldap --with-libdir=lib/x86_64-linux-gnu/ && \
     docker-php-ext-install ldap
 COPY version /var/www/html/
-COPY folder.png /var/www/html/
 COPY *.php /var/www/html/
 RUN mkdir /var/www/classes
 COPY classes/*.php /var/www/classes/
