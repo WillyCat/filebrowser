@@ -1,6 +1,5 @@
 #!/bin/bash
-echo "Tag: \c"
-read tag
+read -p "Tag: " tag
 IMAGE=willycat/filebrowser
 docker login
 docker tag filebrowser ${IMAGE}:${tag}
