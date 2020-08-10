@@ -58,3 +58,4 @@ Date        Version  Changement
                      Moved filebrowser.css to css/ subdirectory
 2020-08-08     1.16  Filtering on file types (dir, files)
                      CSS for checkboxes from https://bootsnipp.com/partha2u
+2020-08-10     1.17  fix issue with login form
