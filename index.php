@@ -209,13 +209,16 @@ if ($action == 'upload')
 		{
 			$target_file = $path . '/' . $name;
 
-			if (move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file))
+			if (@move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file))
 				$info -> set ([
 					'msg' => 'File successfuly uploaded',
 					'level' => 'success',
 					'feather' => 'check-circle'
 				]);
 			else
+				// $_FILES["fileToUpload"]["error"] might contain an error number
+				// from 1 to 8, or zero
+				// for instance, attempting to override a file without appropriate perms will lead to code 0
 				$info -> set ([
 					'msg' => 'Upload failure',
 					'level' => 'danger',
@@ -296,10 +299,19 @@ if ($action == 'export')
 	set_path();
 	if ($conf['csv']['enabled'] == 'yes' && is_dir_allowed ($path))
 	{
-		$filename = get_basename ($path) . '.csv';
-		header('Content-Type: application/octet-stream');
+		$p = new filename ($path);
+		$filename = $p -> get_basename ($path) . '.csv';
+
+		//header('Content-Type: application/octet-stream');
+		header('Content-Type: text/csv');
 		header("Content-Transfer-Encoding: Binary"); 
 		header("Content-disposition: attachment; filename=\"" . $filename . "\""); 
+
+		// Insert the UTF-8 BOM in the file
+		// always do that, as native iso-8859-1 directories will be exported as utf-8
+		$bom = chr(0xEF) . chr(0xBB) . chr(0xBF);
+		echo $bom;
+
 		csv_to_stdout ($path); 
 		die();
 	}
@@ -318,12 +330,18 @@ if ($action == 'download')
 	set_path();
 	if ($root != null && $root['download'] == 'yes')
 	{
-		header('Content-Type: application/octet-stream');
-		header("Content-Transfer-Encoding: Binary"); 
-		header("Content-disposition: attachment; filename=\"" . $file . "\""); 
-		header("Content-Length: " . filesize($pathname));
-		readfile($pathname); 
-		die();
+		$sz = @filesize($pathname);
+		$type = @filetype ($pathname);
+
+		if ($type == 'file')
+		{
+			header('Content-Type: application/octet-stream');
+			header("Content-Transfer-Encoding: Binary"); 
+			header("Content-disposition: attachment; filename=\"" . $file . "\""); 
+			header("Content-Length: " . $sz);
+			readfile($pathname); 
+			die();
+		}
 	}
 
 	$info -> set ([
@@ -525,7 +543,7 @@ csv_to_stdout (string $path): void
 			switch ($column)
 			{
 			case 'Filename' :
-				echo $file['name-8859-1'];
+				echo $file['name-utf8'];
 				break;
 			case 'Size' :
 				if ($file['type'] == 'file')
@@ -631,8 +649,8 @@ send_html_head(): void
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <meta name="description" content="">
-    <meta name="author" content="">
+    <meta name="description" content="filebrowser">
+    <meta name="author" content="willycat">
     <link rel="icon" href="images/folder.png" />
 
     <title>File browsing '.$ver.'</title>
@@ -802,6 +820,7 @@ parse_dir (): void
 	global $conf, $path, $files, $queried_path;
 	global $root;
 	global $filters;
+	global $total_size_used;
 
 	//-------------------
 	// checks is the user is allowed to display this directory
@@ -887,6 +906,8 @@ parse_dir (): void
 		}
 
 		$a['type'] = @filetype ($pathname);
+		//if ($a['type'] == '')
+			//$a['type'] = 'file';
 		if ($a['type'] == 'file')
 		{
 			$a['size'] = @filesize ($pathname);
@@ -1112,7 +1133,8 @@ display_column (array $file, string $column, array $root): void
 		echo $file['type'];
 		break;
 	case 'actions' :
-		display_actions( $file, $root);
+		if ($file['type'] == 'file') // if empty, unreadable, if <> 'file', might not be suitable
+			display_actions( $file, $root);
 		break;
 	default :
 		echo '?';
@@ -1435,13 +1457,21 @@ show_breadcrumb(): void
 		// get_volume() has to be called at each level
 		// as encoding can change due to mount points with different encodings
 		$root = get_volume ($linkpath);
-		if ($root['encoding'] == 'iso-8859-1')
-			$dirlevel_utf8 = utf8_encode($dirlevel);
-		else
+		if ($root == null)	// not allowed
+		{
 			$dirlevel_utf8 = $dirlevel;
+			echo '<li class="breadcrumb-item">' . $dirlevel_utf8 . '</li>';
+		}
+		else
+		{
+			if ($root['encoding'] == 'iso-8859-1')
+				$dirlevel_utf8 = utf8_encode($dirlevel);
+			else
+				$dirlevel_utf8 = $dirlevel;
 
-		$link = make_link ([ 'page' => 1, 'path' => $linkpath ]);
-		echo '<li class="breadcrumb-item"><A HREF="' . $link . '" title="'.$linkpath.'">' . $dirlevel_utf8 . '</a></li>';
+			$link = make_link ([ 'page' => 1, 'path' => $linkpath ]);
+			echo '<li class="breadcrumb-item"><A HREF="' . $link . '" title="'.$linkpath.'">' . $dirlevel_utf8 . '</a></li>';
+		}
 	}
 	?>
 	</ul>
