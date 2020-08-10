@@ -67,3 +67,4 @@ Date        Version  Changement
                      CSV: changed content type to text/csv
                      CSV: always export as utf-8
                      CSV: added UTF8 BOM in file
+2020-08-10     1.21  changed classes location

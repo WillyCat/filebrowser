@@ -1,7 +1,7 @@
 <?php
-require_once '../classes/filename.class.php';
-require_once '../classes/message.class.php';
-require_once '../classes/session.class.php';
+require_once 'classes/filename.class.php';
+require_once 'classes/message.class.php';
+require_once 'classes/session.class.php';
 // GET:
 // action (bookmark, logout)
 // dir [, page]

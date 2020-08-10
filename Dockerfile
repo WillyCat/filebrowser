@@ -7,8 +7,8 @@ RUN \
     docker-php-ext-install ldap
 COPY version /var/www/html/
 COPY *.php /var/www/html/
-RUN mkdir /var/www/classes
-COPY classes/*.php /var/www/classes/
+RUN mkdir /var/www/html/classes
+COPY classes/*.php /var/www/html/classes/
 RUN mkdir /var/www/html/css
 COPY css/*.css* /var/www/html/css/
 RUN mkdir /var/www/html/images
