@@ -674,7 +674,7 @@ formatBytes(int $bytes, int $precision = 2):string
 function
 formatPerms (string $pathname): string
 {
-	$perms = fileperms ($pathname);
+	$perms = @fileperms ($pathname);
 	switch ($perms & 0xF000) {
 	    case 0xC000: // Socket
 		$info = 's';
@@ -899,12 +899,12 @@ parse_dir (): void
 			$a['size-display'] = '';
 		}
 		$a['perms'] = formatPerms ($pathname);
-		$a['mtime'] = filemtime ($pathname);
+		$a['mtime'] = @filemtime ($pathname);
 		if ($a['mtime'])
 			$a['mtime-display'] = strftime ('%F %T', $a['mtime']);
 		else
 			$a['mtime-display'] = '';
-		$a['ctime'] = filectime ($pathname);
+		$a['ctime'] = @filectime ($pathname);
 		if ($a['ctime'])
 			$a['ctime-display'] = strftime ('%F %T', $a['ctime']);
 		else
@@ -1083,7 +1083,7 @@ display_column (array $file, string $column, array $root): void
 		if ($file['type'] == 'link')
 			if (is_dir ($file['target']))
 			{
-				echo '<a href="' . make_path([ 'path' => $file['target']]) .'" title="'.$file['target'].'">';
+				echo '<a href="' . make_link([ 'path' => $file['target']]) .'" title="'.$file['target'].'">';
 				$a_open = true;
 			}
 
