@@ -244,9 +244,8 @@ if ($action == 'confirm-delete')
 		]);
 	else
 	{
-		global $pageno;
-		$no_link = make_link ([ 'page'=>$pageno+1 ]);
-		$yes_link = make_link ([ 'page'=>$pageno+1, 'file' => $file, 'action' => 'delete' ]);
+		$no_link = make_link ([ ]);
+		$yes_link = make_link ([ 'file' => $file, 'action' => 'delete' ]);
 
 		$buttons = [ ];
 		$buttons[] = '<a class="btn btn-primary" href="'.$yes_link.'" role="button">Yes</a>';
@@ -484,10 +483,13 @@ set_pageno(): void
 	else
 		$pageno = 0;
 
+	if ($nbpages == 0)
+		$pageno = 0;
+	else
+		if ($pageno >= $nbpages)
+			$pageno = $nbpages - 1;
 	if ($pageno < 0)
 		$pageno = 0;
-	if ($pageno >= $nbpages)
-		$pageno = $nbpages - 1;
 }
 
 // true if this field is a valid order criteria
@@ -608,7 +610,7 @@ authenticate (): void
 		return;
 	}
 
-	$ldapconn = ldap_connect($conf['ldap']['server'],$conf['ldap']['port']);
+	$ldapconn = @ldap_connect($conf['ldap']['server'],$conf['ldap']['port']);
 	if (!$ldapconn)
 	{
 		$info -> set ([
@@ -625,7 +627,7 @@ authenticate (): void
 	$pattern = $conf['ldap']['pattern'];
 	$dn = str_replace ('{login}', $login, $pattern);
 
-	$lb = ldap_bind($ldapconn,$dn,$password);
+	$lb = @ldap_bind($ldapconn,$dn,$password);
 
 	ldap_close($ldapconn);
 
@@ -830,7 +832,7 @@ parse_dir (): void
 	if ($root == null)
 	{
 		$error -> set ([
-			'msg' => 'You are not allowed to view this directory ('.$path.')', // TODO: utf8
+			'msg' => 'You are not allowed to view this directory',
 			'level' =>  'danger',
 			'feather' => 'slash'
 		]);
@@ -906,8 +908,6 @@ parse_dir (): void
 		}
 
 		$a['type'] = @filetype ($pathname);
-		//if ($a['type'] == '')
-			//$a['type'] = 'file';
 		if ($a['type'] == 'file')
 		{
 			$a['size'] = @filesize ($pathname);
@@ -1041,9 +1041,7 @@ display_action(string $action, array $file, array $root): void
 		{
 			$feather = 'trash';
 			$title = 'Delete file';
-			global $pageno;
 			$action_link = make_link ([
-				'page' => $pageno+1,
 				'action' => 'confirm-delete',
 				'file' => $file['name']
 			]);
@@ -1054,9 +1052,7 @@ display_action(string $action, array $file, array $root): void
 		{
 			$feather = 'download';
 			$title = 'Download file';
-			global $pageno;
 			$action_link = make_link ([
-				'page' => $pageno+1,
 				'action' => 'download',
 				'file' => $file['name']
 			]);
@@ -1165,10 +1161,19 @@ function
 make_link (array $parms): string
 {
 	// fill missing entries
-	$parmskeys = [ 'path', 'page', 'orderby', 'order', 'action', 'file' ];
+	$parmskeys = [ 'path', 'orderby', 'order', 'file' ];
 	foreach ($parmskeys as $parmkey)
 		if (!array_key_exists ($parmkey, $parms))
 			$parms[$parmkey] = '';
+
+	if (!array_key_exists ('action', $parms))
+		$parms['action'] = 'list';
+
+	if (!array_key_exists ('page', $parms))
+	{
+		global $pageno;
+		$parms['page'] = ($pageno+1);
+	}
 
 	// re-use current settings
 	global $orderby, $order, $path;
@@ -1423,7 +1428,7 @@ display_upload_form(): void
 function
 show_breadcrumb(): void
 {
-	global $path, $pageno, $conf;
+	global $path, $conf;
 
 	if ($path == '')
 		return;
@@ -1437,7 +1442,6 @@ show_breadcrumb(): void
 	if ($conf['bookmarks']['enabled'] == 'yes')
 	{
 		echo '<A HREF="'.make_link([
-			'page' => $pageno+1,
 			'action' => 'bookmark'
 		]).'" title="Bookmark this directory">';
 		echo '<span';
@@ -1557,7 +1561,6 @@ foreach ($columns as $column)
 	if ($sortname != '')
 	{
 		$new_order = (($order == 'asc') ? 'desc' : 'asc');
-		//$sortlink = make_link($pageno+1, '', '', $sortname, $new_order);
 		$sortlink = make_link([
 			'page' => 1,
 			'orderby' => $sortname,

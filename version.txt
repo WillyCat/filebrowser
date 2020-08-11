@@ -68,3 +68,4 @@ Date        Version  Changement
                      CSV: always export as utf-8
                      CSV: added UTF8 BOM in file
 2020-08-10     1.21  changed classes location
+2020-08-10     1.22  fixed issue with display on FF
