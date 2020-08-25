@@ -24,7 +24,7 @@ $file = 0; // file in FS encoding
 $root = ''; // volume to be considered for $path
 $page = 0;
 $action = '';
-$filter = '';
+$filter = '*';
 
 $pageno = 0 ; // current page, first is 0
 
@@ -417,9 +417,13 @@ set_filters(string $origin = 'GET'): void
 
 	global $filter;
 	if (array_key_exists ('filter', $from))
+	{
 		$filter = $from['filter'];
+		if ($filter == '')
+			$filter = '*';
+	}
 	else
-		$filter = '';
+		$filter = '*';
 }
 
 // this function sets $path, $file and $pathname globals
@@ -991,13 +995,10 @@ parse_dir (): void
 function
 filter_match (string $str, string $filter): bool
 {
-	if ($filter == '')
+	if ($filter == '' || $filter == '*')
 		return true;
 
-	if ($str == $filter)
-		return true;
-
-	return false;
+	return fnmatch ($filter, $str);
 }
 
 //----------------------------------------------------------
