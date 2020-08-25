@@ -69,3 +69,5 @@ Date        Version  Changement
                      CSV: added UTF8 BOM in file
 2020-08-10     1.21  changed classes location
 2020-08-10     1.22  fixed issue with display on FF
+2020-08-25     1.23  new feature in progress: filtering
+                     does not supports wildcards yet

@@ -12,7 +12,7 @@ require_once 'classes/session.class.php';
 // login, password
 // action (upload)
 
-$filters = [
+$booleanfilters = [
 	'showfiles'=> [ 'label' => 'Files', 'value' => true ],
 	'showdir'=>['label' => 'Directories', 'value' => true ]
 ];
@@ -24,6 +24,7 @@ $file = 0; // file in FS encoding
 $root = ''; // volume to be considered for $path
 $page = 0;
 $action = '';
+$filter = '';
 
 $pageno = 0 ; // current page, first is 0
 
@@ -354,32 +355,71 @@ if ($action == 'download')
 // Function used
 //==============================================================
 
+// return applicable array among GET, POST, REQUEST, COOKIE
 function
-set_orderby(): void
+get_origin (string $origin): ?array
+{
+	$from = null;
+
+	switch ($origin)
+	{
+	case 'GET' :
+		$from = $_GET;
+		break;
+	case 'POST' :
+		$from = $_POST;
+		break;
+	case 'REQUEST' :
+		$from = $_REQUEST;
+		break;
+	case 'COOKIE' :
+		$from = $_COOKIE;
+		break;
+	}
+
+	return $from;
+}
+
+function
+set_orderby(string $origin = 'GET'): void
 {
 	global $orderby, $order;
 
-	if (array_key_exists ('orderby', $_GET) && is_valid_orderby ($_GET['orderby']))
-		$orderby = $_GET['orderby'];
+	$from = get_origin ($origin);
+	if (is_null ($from))
+		$from = [ ];
+
+	if (array_key_exists ('orderby', $from) && is_valid_orderby ($from['orderby']))
+		$orderby = $from['orderby'];
 	else
 		$orderby = 'name';
 
-	if (array_key_exists ('order', $_GET) && is_valid_order ($_GET['order']))
-		$order = $_GET['order'];
+	if (array_key_exists ('order', $from) && is_valid_order ($from['order']))
+		$order = $from['order'];
 	else
 		$order = 'asc';
 }
 
 function
-set_filters(): void
+set_filters(string $origin = 'GET'): void
 {
-	global $filters;
+	global $booleanfilters;
 
-	foreach ($filters as $filtername=>$filter)
-		if (array_key_exists ($filtername, $_GET))
-			$filters[$filtername]['value'] = ($_GET[$filtername] == '1');
+	$from = get_origin ($origin);
+	if (is_null ($from))
+		$from = [ ];
+
+	foreach ($booleanfilters as $filtername=>$booleanfilter)
+		if (array_key_exists ($filtername, $from))
+			$booleanfilters[$filtername]['value'] = ($from[$filtername] == '1');
 		else
-			$filters[$filtername]['value'] = true;
+			$booleanfilters[$filtername]['value'] = true;
+
+	global $filter;
+	if (array_key_exists ('filter', $from))
+		$filter = $from['filter'];
+	else
+		$filter = '';
 }
 
 // this function sets $path, $file and $pathname globals
@@ -391,19 +431,13 @@ set_filters(): void
 function
 set_path(string $origin = 'GET'): void
 {
-	global $path, $queried_path, $file, $pathname, $error;
+	global $path, $file, $pathname, $error;
 
 	$path = $file = '';
 
-	switch ($origin)
+	$from = get_origin ($origin);
+	if (is_null ($from))
 	{
-	case 'GET' :
-		$from = $_GET;
-		break;
-	case 'POST' :
-		$from = $_POST;
-		break;
-	default :
 		$error -> set ([
 			'msg' => 'Invalid origin',
 			'level' => 'danger',
@@ -417,7 +451,6 @@ set_path(string $origin = 'GET'): void
 
 	// we have a path
 	$path = rawurldecode ($from['path']);
-	$queried_path = $path;
 
 	// do we also have a file ?
 	if (array_key_exists('file', $from) && ($from['file'] != ''))
@@ -472,14 +505,16 @@ die();
 	$root = get_volume ($path);
 }
 
-// set pageno from $_GET array
+// set pageno from $_GET or $_POST or $_REQUEST array
 function
-set_pageno(): void
+set_pageno(string $origin = 'GET'): void
 {
 	global $pageno, $nbpages;
 
-	if (array_key_exists ('page', $_GET) && is_numeric($_GET['page']))
-		$pageno = ($_GET['page'] - 1);
+	$from = get_origin ($origin);
+
+	if (array_key_exists ('page', $from) && is_numeric($from['page']))
+		$pageno = ($from['page'] - 1);
 	else
 		$pageno = 0;
 
@@ -819,10 +854,11 @@ function
 parse_dir (): void
 {
 	global $error;
-	global $conf, $path, $files, $queried_path;
+	global $conf, $path, $files;
 	global $root;
-	global $filters;
+	global $booleanfilters;
 	global $total_size_used;
+	global $filter;
 
 	//-------------------
 	// checks is the user is allowed to display this directory
@@ -940,14 +976,28 @@ parse_dir (): void
 			$a['target'] = $p -> get_real_pathname();
 		}
 
-		if ($a['type'] == 'dir' && !$filters['showdir']['value'])
+		if ($a['type'] == 'dir' && !$booleanfilters['showdir']['value'])
 			continue;
-		if ($a['type'] == 'file' && !$filters['showfiles']['value'])
+		if ($a['type'] == 'file' && !$booleanfilters['showfiles']['value'])
+			continue;
+		if (!filter_match ($a['name-utf8'], $filter))
 			continue;
 
 		$files[$i++] = $a;
 	}
 	closedir ($dh);
+}
+
+function
+filter_match (string $str, string $filter): bool
+{
+	if ($filter == '')
+		return true;
+
+	if ($str == $filter)
+		return true;
+
+	return false;
 }
 
 //----------------------------------------------------------
@@ -1158,10 +1208,10 @@ make_js_link (array $parms): string
 }
 
 function
-make_link (array $parms): string
+make_link (array $parms, string $format='get', array $exclude = []): string
 {
 	// fill missing entries
-	$parmskeys = [ 'path', 'orderby', 'order', 'file' ];
+	$parmskeys = [ 'path', 'orderby', 'order', 'file', 'filter' ];
 	foreach ($parmskeys as $parmkey)
 		if (!array_key_exists ($parmkey, $parms))
 			$parms[$parmkey] = '';
@@ -1176,7 +1226,9 @@ make_link (array $parms): string
 	}
 
 	// re-use current settings
-	global $orderby, $order, $path;
+	global $orderby, $order, $path, $filter;
+	if ($parms['filter'] == '')
+		$parms['filter'] = $filter;
 	if ($parms['orderby'] == '')
 		$parms['orderby'] = $orderby;
 	if ($parms['order'] == '')
@@ -1185,18 +1237,34 @@ make_link (array $parms): string
 		$parms['path'] = $path;
 
 	// if not set to a special value, then re use current parms
-	global $filters;
-	foreach ($filters as $filtername=>$filter)
+	global $booleanfilters;
+	foreach ($booleanfilters as $filtername=>$booleanfilter)
 		if (!array_key_exists ($filtername, $parms))
-			$parms[$filtername] = ($filters[$filtername]['value'] ? '1' : '0' );
+			$parms[$filtername] = ($booleanfilters[$filtername]['value'] ? '1' : '0' );
 
-	// encode each part
-	$urlparts = [ ];
-	foreach ($parms as $key => $value)
-		$urlparts[] = $key . '=' . rawurlencode ($parms[$key]);
+	switch ($format)
+	{
+	case 'get' :
+		// encode each part
+		$urlparts = [ ];
+		foreach ($parms as $key => $value)
+			if (!in_array ($key, $exclude))
+				$urlparts[] = $key . '=' . rawurlencode ($parms[$key]);
 
-	// paste parts together
-	$link = '?' . implode ('&', $urlparts);
+		// paste parts together
+		$link = '?' . implode ('&', $urlparts);
+		break;
+
+	case 'post' :
+		// encode each part
+		$urlparts = [ ];
+		foreach ($parms as $key => $value)
+			if (!in_array ($key, $exclude))
+				$urlparts[] = '<input type="hidden" name="' . $key . '" value="' . htmlspecialchars ($parms[$key]) . '">'; // TODO : pas rawurlencode
+		// paste parts together
+		$link = implode ("\n", $urlparts);
+		break;
+	}
 
 	return $link;
 }
@@ -1486,20 +1554,20 @@ show_breadcrumb(): void
 function
 display_checkboxes_and_pagination(): void
 {
-	global $filters;
+	global $booleanfilters;
 	global $pageno, $nbpages;
 ?>
 <div class="">
   <div class="row justify-content-around">
 <?php
-	foreach ($filters as $filtername=>$filter)
+	foreach ($booleanfilters as $filtername=>$booleanfilter)
 	{
 ?>
     <div class="col-md-auto">
       <?= display_checkbox([
-	'label' => $filter['label'],
+	'label' => $booleanfilter['label'],
 	'name' => $filtername,
-	'checked' => $filter['value'],
+	'checked' => $booleanfilter['value'],
 	'id' => $filtername
 	]); ?>
     </div>
@@ -1620,7 +1688,7 @@ if ($root['upload'] == 'yes')
 
 $debugstr = '';
 if ($path == '')
-	set_path();
+	set_path('REQUEST');
 if ($path == '')
 {
 	$error -> set ([
@@ -1630,15 +1698,16 @@ if ($path == '')
 }
 else
 {
-	set_filters();
+	set_filters('REQUEST');
 	get_dir_content ();
-	set_pageno();
+	set_pageno('REQUEST');
 }
 
 send_html_head();
 ?>
 
   <body>
+	<form name="filter" method="POST" action="index.php">
     <nav class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0">
       <a class="navbar-brand col-sm-3 col-md-2 mr-0" href="<?=$conf['title']['url'] ?>" alt="<?=$conf['title']['text'] ?>" title="<?=$conf['title']['text'] ?>">
 <?php
@@ -1648,14 +1717,14 @@ send_html_head();
 		echo htmlentities($conf['title']['text']);
 ?>
 	</a>
-	<!--
-      <input class="form-control form-control-dark w-100" type="text" placeholder="Search" aria-label="Search">
-	-->
+	<?= make_link ([ 'page' => 1 ], 'post', [ 'filter' ]) ?>
+      <input class="form-control form-control-dark w-100" type="text" placeholder="Filter" aria-label="Filter" name="filter" value="<?=htmlspecialchars($filter)?>">
       <ul class="navbar-nav px-3">
         <li class="nav-item text-nowrap">
         </li>
       </ul>
     </nav>
+	</form>
 
     <div class="container-fluid">
       <div class="row">
