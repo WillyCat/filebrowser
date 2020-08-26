@@ -705,6 +705,7 @@ send_html_head(): void
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
 <link rel="stylesheet" href="css/filebrowser.css">
 <link rel="stylesheet" href="css/check-box.css">
+<script src="js/filebrowser.js"></script>
 
   </head>
 ';
@@ -1132,7 +1133,7 @@ display_actions (array $file, array $root): void
 }
 
 function
-display_column (array $file, string $column, array $root): void
+display_column (int $linenum, int $from, int $to, array $file, string $column, array $root): void
 {
 	global $path;
 
@@ -1141,6 +1142,10 @@ display_column (array $file, string $column, array $root): void
 	echo '<td class="col-'.strtolower($column).'">';
 	switch ($column)
 	{
+	case 'checkbox' :
+		if ($file['type'] == 'file')
+			echo '<input type="checkbox" id="L'.($linenum+1).'" onClick="showHideGroupActions('.$from.','.$to.')">';
+		break;
 	case 'Filename' :
 		if ($file['type'] == 'dir')
 		{
@@ -1193,11 +1198,11 @@ display_column (array $file, string $column, array $root): void
 }
 
 function
-display_line (int $i, array $file, array $columns, array $root): void
+display_line (int $linenum, int $from, int $to, array $file, array $columns, array $root): void
 {
 	echo '<tr>';
 	foreach ($columns as $column)
-		display_column ($file, $column, $root);
+		display_column ($linenum, $from, $to, $file, $column, $root);
 	echo '</tr>';
 }
 
@@ -1575,6 +1580,9 @@ display_checkboxes_and_pagination(): void
 <?php
 	}
 ?>
+    <div class="col-md-auto" id="multi">
+MULTI
+    </div>
 
     <div class="col-sm">
 	<?php show_pagination ($pageno, $nbpages); ?>
@@ -1598,6 +1606,12 @@ display_files (): void
 	global $conf;
 	$columns = $conf['display']['columns'];
 	$n = count($files);
+
+	// global indexes displayed on this page
+	$from = $pageno * $conf['display']['pagesize'];
+	$to = min ($n-1, ($pageno+1)* $conf['display']['pagesize'] -1);
+	if ($to < 0)
+		$to = 0;
 ?>
           <div class="table-responsive">
             <table class="table table-striped table-sm">
@@ -1613,6 +1627,9 @@ foreach ($columns as $column)
 
 	switch ($column)
 	{
+	case 'checkbox' :
+		echo '<input type="checkbox" onClick="revertSelection('.$from.','.$to.')" id="LREVERT">';
+		break;
 	case 'Filename' :
 		$sortname = 'name';
 		break;
@@ -1640,7 +1657,8 @@ foreach ($columns as $column)
 		echo '</a>';
 	}
 	else
-		echo $column;
+		if ($column != 'checkbox')
+			echo $column;
 
 	if ($sortname == $orderby) // show a mark indicating this column is current sort
 	{
@@ -1657,11 +1675,11 @@ foreach ($columns as $column)
 <?php
 $root = get_volume ($path);
 $page_size_used = 0;
-for ($lineno = 0, $i = ($pageno * $conf['display']['pagesize']); ($lineno < $conf['display']['pagesize']) && ($i < $n); $i++, $lineno++)
+for ($lineno = 0, $i = $from; $i <= $to; $i++, $lineno++)
 {
 	if ($files[$i]['type'] == 'file')
 		$page_size_used += $files[$i]['size'];
-	display_line ($i, $files[$i], $columns, $root);
+	display_line ($i, $from, $to, $files[$i], $columns, $root);
 }
 ?>
               </tbody>
@@ -1674,7 +1692,7 @@ $fotter = '';
 $footer .= "Displaying page ".($pageno+1)."/".$nbpages." sorted on ".$orderby." in ".$order." order";
 if ($n > 0)
 {
-	$footer .= " - Files " . (1+$pageno * $conf['display']['pagesize']) . ' - ' . min($n, ($pageno+1)*$conf['display']['pagesize']) . ' out of ' . $n;
+	$footer .= " - Files " . (1+$from) . ' - ' . (1+$to) . ' out of ' . $n;
 	$footer .= ' - ' . "Page contains " . formatBytes($page_size_used,2) . ' out of ' . formatBytes($total_size_used,2);
 }
 $footer .= ' - Native encoding: ' . $root['encoding'];
@@ -1841,6 +1859,7 @@ if ($conf['auth'] == 'ldap') {
 <?php if ($use_dropdowns) { ?>
 $('.dropdown-toggle').dropdown();
 <?php } ?>
+		$('#multi').hide();
             });
     </script>
 

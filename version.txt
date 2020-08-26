@@ -72,3 +72,4 @@ Date        Version  Changement
 2020-08-25     1.23  new feature in progress: filtering
                      does not supports wildcards yet
 2020-08-25     1.24  widcard support (uses fnmatch() )
+2020-08-26     1.25  wip: actions on multiple files
