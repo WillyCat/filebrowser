@@ -1200,6 +1200,9 @@ display_column (int $linenum, int $from, int $to, array $file, string $column, a
 function
 display_line (int $linenum, int $from, int $to, array $file, array $columns, array $root): void
 {
+	if ($from == -1)
+		return;
+
 	echo '<tr>';
 	foreach ($columns as $column)
 		display_column ($linenum, $from, $to, $file, $column, $root);
@@ -1607,11 +1610,14 @@ display_files (): void
 	$columns = $conf['display']['columns'];
 	$n = count($files);
 
-	// global indexes displayed on this page
-	$from = $pageno * $conf['display']['pagesize'];
-	$to = min ($n-1, ($pageno+1)* $conf['display']['pagesize'] -1);
-	if ($to < 0)
-		$to = 0;
+	if ($n == 0)	// no data
+		$from = $to = -1;
+	else
+	{
+		// global indexes displayed on this page
+		$from = $pageno * $conf['display']['pagesize'];
+		$to = min ($n-1, ($pageno+1)* $conf['display']['pagesize'] -1);
+	}
 ?>
           <div class="table-responsive">
             <table class="table table-striped table-sm">
@@ -1675,12 +1681,13 @@ foreach ($columns as $column)
 <?php
 $root = get_volume ($path);
 $page_size_used = 0;
-for ($lineno = 0, $i = $from; $i <= $to; $i++, $lineno++)
-{
-	if ($files[$i]['type'] == 'file')
-		$page_size_used += $files[$i]['size'];
-	display_line ($i, $from, $to, $files[$i], $columns, $root);
-}
+if ($n > 0) // some data
+	for ($lineno = 0, $i = $from; $i <= $to; $i++, $lineno++)
+	{
+		if ($files[$i]['type'] == 'file')
+			$page_size_used += $files[$i]['size'];
+		display_line ($i, $from, $to, $files[$i], $columns, $root);
+	}
 ?>
               </tbody>
             </table>
@@ -1859,7 +1866,7 @@ if ($conf['auth'] == 'ldap') {
 <?php if ($use_dropdowns) { ?>
 $('.dropdown-toggle').dropdown();
 <?php } ?>
-		$('#multi').hide();
+		hideGroupActions();
             });
     </script>
 

@@ -39,11 +39,13 @@ showHideGroupActions(from, to)
 function
 showGroupActions()
 {
+console.log ('showGroupActions');
 	$('#multi').show();
 }
 
 function
 hideGroupActions()
 {
+console.log ('hideGroupActions');
 	$('#multi').hide();
 }

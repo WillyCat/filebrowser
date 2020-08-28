@@ -73,3 +73,4 @@ Date        Version  Changement
                      does not supports wildcards yet
 2020-08-25     1.24  widcard support (uses fnmatch() )
 2020-08-26     1.25  wip: actions on multiple files
+2020-08-28     1.26  progress on wip
