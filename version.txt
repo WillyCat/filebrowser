@@ -74,3 +74,5 @@ Date        Version  Changement
 2020-08-25     1.24  widcard support (uses fnmatch() )
 2020-08-26     1.25  wip: actions on multiple files
 2020-08-28     1.26  progress on wip
+2020-09-01     1.27  new optional section in conf.json: log
+                     if filled, will log all actions to a file

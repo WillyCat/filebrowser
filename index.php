@@ -2,6 +2,7 @@
 require_once 'classes/filename.class.php';
 require_once 'classes/message.class.php';
 require_once 'classes/session.class.php';
+require_once 'classes/log.class.php';
 // GET:
 // action (bookmark, logout)
 // dir [, page]
@@ -25,6 +26,8 @@ $root = ''; // volume to be considered for $path
 $page = 0;
 $action = '';
 $filter = '*';
+$log = null;
+$status = 'OK';
 
 $pageno = 0 ; // current page, first is 0
 
@@ -156,15 +159,24 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 				]);
 
 				if (($key = array_search($path, $bookmarks)) !== false)
-				    unset($bookmarks[$key]);
+				{
+					unset($bookmarks[$key]);
+					$status = 'OK';
+				}
+				else
+					$status = 'NOK';
 			}
 			else
+			{
 				if (count($bookmarks) >= $conf['bookmarks']['max'])
+				{
 					$info -> set([
 						'msg' => 'Maximum number of bookmarks reached',
 						'level' => 'warning',
 						'feather' => 'slash'
 					]);
+					$status = 'NOK';
+				}
 				else
 				{
 					$info -> set ([
@@ -174,7 +186,9 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 					]);
 
 					$bookmarks[] = $path;
+					$status = 'OK';
 				}
+			}
 			$bookmarks_cookie_value = serialize($bookmarks);
 			setcookie ($bookmarks_cookie_name, $bookmarks_cookie_value);
 		}
@@ -189,11 +203,14 @@ if ($action == 'upload')
 	set_path('POST');
 
 	if ($root == null || $root['upload'] == 'no')
+	{
 		$info -> set ([
 			'msg' => 'Upload not allowed in this directory',
 			'feather' => 'slash',
 			'level' => 'danger'
 		]);
+		$status = 'NOK';
+	}
 	else
 	{
 		$name = $_FILES["fileToUpload"]["name"];
@@ -201,22 +218,29 @@ if ($action == 'upload')
 		$ext  = strtolower(pathinfo($name,PATHINFO_EXTENSION));
 
 		if (strlen ($name) == 0)
+		{
 			$info -> set ([
 				'msg' => 'No file selected for upload',
 				'level' => 'warning',
 				'feather' => 'slash'
 			]);
+			$status = 'NOK';
+		}
 		else
 		{
 			$target_file = $path . '/' . $name;
 
 			if (@move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file))
+			{
 				$info -> set ([
 					'msg' => 'File successfuly uploaded',
 					'level' => 'success',
 					'feather' => 'check-circle'
 				]);
+				$status = 'OK';
+			}
 			else
+			{
 				// $_FILES["fileToUpload"]["error"] might contain an error number
 				// from 1 to 8, or zero
 				// for instance, attempting to override a file without appropriate perms will lead to code 0
@@ -225,6 +249,8 @@ if ($action == 'upload')
 					'level' => 'danger',
 					'feather' => 'alert-triangle'
 				]);
+				$status = 'NOK';
+			}
 		}
 	}
 }
@@ -238,11 +264,14 @@ if ($action == 'confirm-delete')
 	set_pageno();
 
 	if ($root == null || $root['delete'] == 'no')
+	{
+		$status = 'NOK';
 		$info -> set ([
 			'msg' => 'Deletion is not allowed in this directory',
 			'feather' => 'slash',
 			'level' => 'danger'
 		]);
+	}
 	else
 	{
 		$no_link = make_link ([ ]);
@@ -258,6 +287,7 @@ if ($action == 'confirm-delete')
 			'level' => 'warning',
 			'buttons' => $buttons
 		]);
+		$status = 'OK';
 	}
 }
 
@@ -269,25 +299,34 @@ if ($action == 'delete')
 {
 	set_path();
 	if ($root == null || $root['delete'] == 'no')
+	{
 		$info -> set ([
 			'msg' => 'This action is not allowed',
 			'feather' => 'slash',
 			'level' => 'danger'
 		]);
+		$status = 'NOK';
+	}
 	else
 	{
 		if (@unlink($pathname))
+		{
 			$info -> set ([
 				'msg' => 'File ' .$file. ' deleted', // TODO: utf8_encode
 				'level' =>  'success',
 				'feather' => 'check-circle'
 			]);
+			$status = 'OK';
+		}
 		else
+		{
 			$info -> set ([
 				'msg' => 'Deletion failed',
 				'level' => 'danger',
 				'feather' => 'alert-triangle'
 			]);
+			$status = 'NOK';
+		}
 	}
 }
 
@@ -313,6 +352,20 @@ if ($action == 'export')
 		echo $bom;
 
 		csv_to_stdout ($path); 
+
+		$status = 'OK';
+
+		if (array_key_exists ('log', $conf))
+		{
+			$log = new log($conf['log']['file']);
+			try
+			{
+				$log -> log([ $action, $path, '', $status ]);
+			} catch (Exception $e) {
+			global_failure ($e -> getMessage() );
+			}
+		}
+
 		die();
 	}
 
@@ -321,6 +374,7 @@ if ($action == 'export')
 		'feather' => 'slash',
 		'msg' => 'Operation not permitted'
 	]);
+	$status = 'NOK';
 }
 //==============================================================
 // Download a file
@@ -340,6 +394,19 @@ if ($action == 'download')
 			header("Content-disposition: attachment; filename=\"" . $file . "\""); 
 			header("Content-Length: " . $sz);
 			readfile($pathname); 
+
+			$status = 'OK';
+			if (array_key_exists ('log', $conf))
+			{
+				$log = new log($conf['log']['file']);
+				try
+				{
+					$log -> log([ $action, $path, $file, $status ]);
+				} catch (Exception $e) {
+				global_failure ($e -> getMessage() );
+				}
+			}
+
 			die();
 		}
 	}
@@ -349,10 +416,11 @@ if ($action == 'download')
 		'feather' => 'slash',
 		'msg' => 'Operation not permitted'
 	]);
+	$status = 'NOK';
 }
 
 //==============================================================
-// Function used
+// Functions used
 //==============================================================
 
 // return applicable array among GET, POST, REQUEST, COOKIE
@@ -864,6 +932,7 @@ parse_dir (): void
 	global $booleanfilters;
 	global $total_size_used;
 	global $filter;
+	global $status;
 
 	//-------------------
 	// checks is the user is allowed to display this directory
@@ -877,6 +946,7 @@ parse_dir (): void
 			'level' =>  'danger',
 			'feather' => 'slash'
 		]);
+		$status = 'NOK';
 		return;
 	}
 
@@ -891,6 +961,7 @@ parse_dir (): void
 			'level' => 'danger',
 			'feather' => 'slash'
 		]);
+		$status = 'NOK';
 		return;
 	}
 
@@ -912,6 +983,7 @@ parse_dir (): void
 			'level' => 'danger',
 			'feather' => 'alert-triangle'
 		]);
+		$status = 'NOK';
 		return;
 	}
 
@@ -1019,7 +1091,7 @@ global_failure(string $msg): void
 <h1 class="display-3">Error !</h1>
 <p>
 ';
-	display_error ($msg, 'danger', 'alert-triangle');
+	echo $msg;
 	echo '
 </p>
 </div>
@@ -1727,6 +1799,17 @@ else
 	set_filters('REQUEST');
 	get_dir_content ();
 	set_pageno('REQUEST');
+}
+
+if (array_key_exists ('log', $conf))
+{
+	$log = new log($conf['log']['file']);
+	try
+	{
+		$log -> log([ $action, $path, $file, $status ]);
+	} catch (Exception $e) {
+		global_failure ($e -> getMessage() );
+	}
 }
 
 send_html_head();
