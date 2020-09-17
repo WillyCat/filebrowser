@@ -23,7 +23,7 @@ class log
 		// i.e. the first one
 		if ($this -> pathname == '')
 		{
-			$timestamp = date();
+			$timestamp = time();
 			$str = $this -> fn_pattern;
 			$str = str_replace ('%Y', date('Y',$timestamp), $str);
 			$str = str_replace ('%m', date('m',$timestamp), $str);

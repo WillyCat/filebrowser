@@ -81,3 +81,4 @@ Date        Version  Changement
                      if directories has more entries that threshold, sorting on size and mtime
                      is disabled - this avoid reading size and mtime for all entries,
 2020-09-17     1.29  fixed git merge issue
+2020-09-17     1.30  added filtering on mtime (wip, not a useable version)

@@ -25,7 +25,8 @@ $file = 0; // file in FS encoding
 $root = ''; // volume to be considered for $path
 $page = 0;
 $action = '';
-$filter = '*';
+$filter = '';
+$filtertype = 'Filename';
 $log = null;
 $status = 'OK';
 $fastmode_threshold = 5000;
@@ -493,15 +494,15 @@ set_filters(string $origin = 'GET'): void
 		else
 			$booleanfilters[$filtername]['value'] = true;
 
-	global $filter;
-	if (array_key_exists ('filter', $from))
-	{
-		$filter = $from['filter'];
-		if ($filter == '')
-			$filter = '*';
-	}
+	global $filter, $filtertype;
+
+	if (array_key_exists ('filtertype', $from))
+		$filtertype = $from['filtertype'];
 	else
-		$filter = '*';
+		$filtertype = 'Filename';
+
+	if (array_key_exists ('filter', $from))
+		$filter = $from['filter'];
 }
 
 // this function sets $path, $file and $pathname globals
@@ -932,10 +933,21 @@ get_dir_content (): void
 	});
 }
 
+function
+extend_mtime (array &$a): void
+{
+	$a['mtime'] = @filemtime ($a['pathname']);
+	if ($a['mtime'])
+		$a['mtime-display'] = strftime ('%F %T', $a['mtime']);
+	else
+		$a['mtime-display'] = '';
+}
 
 function
 extend (array &$a): void
 {
+	global $total_size_used;
+
 	$pathname = $a['pathname'];
 
 	if ($a['type'] == 'file')
@@ -950,11 +962,7 @@ extend (array &$a): void
 		$a['size-display'] = '';
 	}
 	$a['perms'] = formatPerms ($pathname);
-	$a['mtime'] = @filemtime ($pathname);
-	if ($a['mtime'])
-		$a['mtime-display'] = strftime ('%F %T', $a['mtime']);
-	else
-		$a['mtime-display'] = '';
+	extend_mtime ($a);
 	$a['ctime'] = @filectime ($pathname);
 	if ($a['ctime'])
 		$a['ctime-display'] = strftime ('%F %T', $a['ctime']);
@@ -970,7 +978,7 @@ parse_dir (): void
 	global $root;
 	global $booleanfilters;
 	global $total_size_used;
-	global $filter;
+	global $filter, $filtertype;
 	global $status;
 
 	//-------------------
@@ -1046,11 +1054,34 @@ parse_dir (): void
 	{
 	*/
 
-	global $fastmode;
+	global $fastmode, $fastmode_threshold;
 	if (count ($dirfiles) > $fastmode_threshold)
 		$fastmode = true;
 	else
 		$fastmode = false;
+
+	if ($filtertype == 'mtime' && $filter != '')
+	{
+		try
+		{
+			$filter_compiled = filter_mtime_compile ($filter);
+
+			$filter = '';
+			$filter .= $filter_compiled['from']['date']['value'] . ' ' . $filter_compiled['from']['time']['value'];
+			$filter .= ' ';
+			$filter .= $filter_compiled['to']['date']['value'] . ' ' . $filter_compiled['to']['time']['value'];
+		} catch (Exception $e) {
+			$error -> set ([
+				'msg' => $e -> getMessage(),
+				'level' => 'danger',
+				'feather' => 'alert-triangle'
+			]);
+			$status = 'NOK';
+			return;
+		}; 
+	}
+	else
+		$filter_compiled = null;
 
 	$i = 0;
 	foreach ($dirfiles as $file)
@@ -1086,6 +1117,16 @@ parse_dir (): void
 		$a['type'] = @filetype ($pathname);
 		if (!$fastmode)
 			extend ($a);
+		else
+		{
+			// in fast mode, read only extended attributes used for filtering
+			switch ($filtertype)
+			{
+			case 'mtime' :
+				extend_mtime ($a);
+				break;
+			}
+		}
 
 		if ($a['type'] == 'link')
 		{
@@ -1101,8 +1142,19 @@ parse_dir (): void
 			continue;
 		if ($a['type'] == 'file' && !$booleanfilters['showfiles']['value'])
 			continue;
-		if (!filter_match ($a['name-utf8'], $filter))
-			continue;
+
+		switch ($filtertype)
+		{
+		case 'Filename' :
+			if (!filter_filename_match ($a['name-utf8'], $filter))
+				continue 2;
+			break;
+		case 'mtime' :
+			if ($filter_compiled != null)
+				if (!filter_mtime_match ($a['mtime'], $filter_compiled))
+					continue 2;
+			break;
+		}
 
 		$files[$i++] = $a;
 	}
@@ -1113,7 +1165,189 @@ parse_dir (): void
 }
 
 function
-filter_match (string $str, string $filter): bool
+filter_mtime_compile (string $filterstring): array
+{
+	$filterstring = trim($filterstring);
+
+	$f = [
+		'from' => [
+			'date' => [
+				'format' => '',
+				'value' => ''
+			],
+			'time' => [
+				'format' => '',
+				'value' => '',
+			]
+		],
+		'to' => [
+			'date' => [
+				'format' => '',
+				'value' => ''
+			],
+			'time' => [
+				'format' => '',
+				'value' => '',
+			]
+		]
+	];
+
+	if ($filterstring != '')
+	{
+		$filter_parts = explode (' ', $filterstring);
+
+		foreach ($filter_parts as $filter_part)
+		{
+			switch (strlen ($filter_part))
+			{
+			case 10 :	// yyyy-mm-dd
+				$fmt = 'yyyy-mm-dd';
+				$typ = 'date';
+				break;
+			case 7 :	// yyyy-mm
+				$fmt = 'yyyy-mm';
+				$typ = 'date';
+				break;
+			case 4 :	// yyyy
+				$fmt = 'yyyy';
+				$typ = 'date';
+				break;
+			case 5 :	// hh:mm
+				$fmt = 'hh:mm';
+				$typ = 'time';
+				break;
+			case 8 :	// hh:mm:ss
+				$fmt = 'hh:mm:ss';
+				$typ = 'time';
+				break;
+
+			default :
+				throw new Exception ("Sorry I don't understand what " . '"' . $filter_part . '"' . ' means for filter mtime, expected format is YYYY[-MM[-DD [HH:MM[:SS]]]]');
+			}
+
+			if ($f['from'][$typ]['format'] == '')
+			{
+				$f['from'][$typ]['format'] = $fmt;
+				$f['from'][$typ]['value']  = $filter_part;
+			}
+			else
+				if ($f['to'][$typ]['format'] == '')
+				{
+					$f['to'][$typ]['format'] = $fmt;
+					$f['to'][$typ]['value']  = $filter_part;
+				}
+				else
+					throw new Exception ($typ . ' appaears more than twice');
+		}
+	}
+
+	// time without a date, consider today
+	if ($f['from']['time']['value'] != ''
+	&&  $f['from']['date']['value'] == '')
+	{
+		$f['from']['date']['format'] = 'yyyy-mm-dd';
+		$f['from']['date']['value']  = date ('Y-m-d');
+	}
+
+	// date without a time, consider 00:00
+	if ($f['from']['date']['value'] != ''
+	&&  $f['from']['time']['value'] == '')
+		$f['from']['time'] = ['format' => 'hh:mm:ss', 'value' => '00:00:00' ];
+
+	switch ($f['from']['date']['format'])
+	{
+	case 'yyyy' :
+		$value = $f['from']['date']['value'];
+		$f['from']['date']['format'] = 'yyyy-mm-dd';
+		$f['from']['date']['value'] = $value . '-01-01';
+		if ($f['to']['date']['value'] == '')
+		{
+			$f['to']['date']['value'] = $value . '-12-31';
+			$f['to']['date']['format'] = 'yyyy-mm-dd';
+		}
+		break;
+	case 'yyyy-mm' :
+		$value = $f['from']['date']['value'];
+		$f['from']['date']['format'] = 'yyyy-mm-dd';
+		$f['from']['date']['value'] = $value . '-01';
+		if ($f['to']['date']['value'] == '')
+		{
+			$f['to']['date']['value'] = $value . '-' . last_day_of_month($value);
+			$f['to']['date']['format'] = 'yyyy-mm-dd';
+		}
+		break;
+	case 'yyyy-mm-dd' :
+		$value = $f['from']['date']['value'];
+		if ($f['to']['date']['value'] == '')
+		{
+			$f['to']['date']['value'] = $value;
+			$f['to']['date']['format'] = 'yyyy-mm-dd';
+		}
+		break;
+	}
+
+	switch ($f['from']['time']['format'])
+	{
+	case 'hh:mm' :
+		$f['from']['time']['format'] = 'hh:mm:ss';
+		$f['from']['time']['value'] .= ':00';
+		break;
+	}
+
+	if ($f['to']['time']['value'] != ''
+	&&  $f['to']['date']['value'] == '')
+		$f['to']['date'] = $f['from']['date'];
+
+	// date without a time, consider 23:59:59
+	if ($f['to']['date']['value'] != ''
+	&&  $f['to']['time']['value'] == '')
+		$f['to']['time'] = ['format' => 'hh:mm:ss', 'value' => '23:59:59' ];
+
+	switch ($f['to']['date']['format'])
+	{
+	case 'yyyy' :
+		$f['to']['date']['format'] = 'yyyy-mm-dd';
+		$f['to']['date']['value'] .= '-12-31';
+		break;
+	case 'yyyy-mm' :
+		$f['to']['date']['format'] = 'yyyy-mm-dd';
+		$f['to']['date']['value'] .= '-' . last_day_of_month($f['to']['date']['value']);
+		break;
+	}
+
+	switch ($f['to']['time']['format'])
+	{
+	case 'hh:mm' :
+		$f['to']['time']['format'] = 'hh:mm:ss';
+		$f['to']['time']['value'] .= ':59';
+		break;
+	}
+
+	$f['from']['sec'] = strtotime ($f['from']['date']['value'] . ' ' . $f['from']['time']['value']);
+	$f['to']['sec'] = strtotime ($f['to']['date']['value'] . ' ' . $f['to']['time']['value']);
+
+	return $f;
+}
+
+function
+last_day_of_month (string $yyyy_mm): string
+{
+	return '31';
+	// TODO: compute it !
+}
+
+function
+filter_mtime_match (int $mtime, array $f): bool
+{
+	if ($mtime < $f['from']['sec'])
+		return false;
+	if ($mtime > $f['to']['sec'])
+		return false;
+	return true;
+}
+
+function
+filter_filename_match (string $str, string $filter): bool
 {
 	if ($filter == '' || $filter == '*')
 		return true;
@@ -1257,9 +1491,6 @@ display_column (int $linenum, int $from, int $to, array $file, string $column, a
 	global $path;
 	global $fastmode;
 
-	if ($fastmode)
-		extend ($file);
-
 	$a_open = false;
 
 	echo '<td class="col-'.strtolower($column).'">';
@@ -1343,7 +1574,7 @@ function
 make_link (array $parms, string $format='get', array $exclude = []): string
 {
 	// fill missing entries
-	$parmskeys = [ 'path', 'orderby', 'order', 'file', 'filter' ];
+	$parmskeys = [ 'path', 'orderby', 'order', 'file', 'filter', 'filtertype' ];
 	foreach ($parmskeys as $parmkey)
 		if (!array_key_exists ($parmkey, $parms))
 			$parms[$parmkey] = '';
@@ -1358,9 +1589,11 @@ make_link (array $parms, string $format='get', array $exclude = []): string
 	}
 
 	// re-use current settings
-	global $orderby, $order, $path, $filter;
+	global $orderby, $order, $path, $filter, $filtertype;
 	if ($parms['filter'] == '')
 		$parms['filter'] = $filter;
+	if ($parms['filtertype'] == '')
+		$parms['filtertype'] = $filtertype;
 	if ($parms['orderby'] == '')
 		$parms['orderby'] = $orderby;
 	if ($parms['order'] == '')
@@ -1811,6 +2044,8 @@ $page_size_used = 0;
 if ($n > 0) // some data
 	for ($lineno = 0, $i = $from; $i <= $to; $i++, $lineno++)
 	{
+		if ($fastmode)
+			extend ($files[$i]);
 		if ($files[$i]['type'] == 'file')
 			$page_size_used += $files[$i]['size'];
 		display_line ($i, $from, $to, $files[$i], $columns, $root);
@@ -1886,14 +2121,22 @@ send_html_head();
 		echo htmlentities($conf['title']['text']);
 ?>
 	</a>
-	<?= make_link ([ 'page' => 1 ], 'post', [ 'filter' ]) ?>
-      <input class="form-control form-control-dark w-100" type="text" placeholder="Filter" aria-label="Filter" name="filter" value="<?=htmlspecialchars($filter)?>">
+	<?= make_link ([  'page' => 1 ], 'post', [ 'filter', 'filtertype' ]) ?>
+<div class=" w-75">
+      <input class="form-control inputdefault form-control-dark w-100" type="text" placeholder="Filter" aria-label="Filter" name="filter" value="<?=htmlspecialchars($filter)?>">
+</div>
+<div class=" w-25">
+	<select class="" name="filtertype"><option value="Filename" <?=($filtertype=='Filename')?'selected':''?>>Filename</option><option value="mtime" <?=($filtertype=='mtime')?'selected':''?>>mtime</option></select>
+</div>
       <ul class="navbar-nav px-3">
         <li class="nav-item text-nowrap">
         </li>
       </ul>
+	<button type="submit" class="btn btn-primary">Submit</button>
     </nav>
 	</form>
+
+<!-- -->
 
     <div class="container-fluid">
       <div class="row">
