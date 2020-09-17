@@ -1121,6 +1121,15 @@ filter_match (string $str, string $filter): bool
 	return fnmatch ($filter, $str);
 }
 
+function
+filter_match (string $str, string $filter): bool
+{
+	if ($filter == '' || $filter == '*')
+		return true;
+
+	return fnmatch ($filter, $str);
+}
+
 //----------------------------------------------------------
 
 // display the error and leave

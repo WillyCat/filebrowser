@@ -76,7 +76,10 @@ Date        Version  Changement
 2020-08-28     1.26  progress on wip
 2020-09-01     1.27  new optional section in conf.json: log
                      if filled, will log all actions to a file
+<<<<<<< HEAD
 2020-09-17     1.28  to prevent timeout when dealing with huge directories
                      added a new parm: threshold
                      if directories has more entries that threshold, sorting on size and mtime
                      is disabled - this avoid reading size and mtime for all entries,
+=======
+>>>>>>> 102e5653d68a1891d26ad6ab1c7d544ac43dbb16
