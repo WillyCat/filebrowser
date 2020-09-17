@@ -1,7 +1,8 @@
 <?php
-require_once '../classes/filename.class.php';
-require_once '../classes/message.class.php';
-require_once '../classes/session.class.php';
+require_once 'classes/filename.class.php';
+require_once 'classes/message.class.php';
+require_once 'classes/session.class.php';
+require_once 'classes/log.class.php';
 // GET:
 // action (bookmark, logout)
 // dir [, page]
@@ -12,7 +13,7 @@ require_once '../classes/session.class.php';
 // login, password
 // action (upload)
 
-$filters = [
+$booleanfilters = [
 	'showfiles'=> [ 'label' => 'Files', 'value' => true ],
 	'showdir'=>['label' => 'Directories', 'value' => true ]
 ];
@@ -24,6 +25,13 @@ $file = 0; // file in FS encoding
 $root = ''; // volume to be considered for $path
 $page = 0;
 $action = '';
+$filter = '*';
+$log = null;
+$status = 'OK';
+$fastmode_threshold = 5000;
+$multi_enabled = false;
+
+$microstart = microtime(true);
 
 $pageno = 0 ; // current page, first is 0
 
@@ -74,6 +82,10 @@ if (!array_key_exists ('volumes', $conf))
 
 if (count ($conf['volumes']) == 0)
 	global_failure ('no volume configured');
+
+if (!array_key_exists ('fastmode', $conf)
+&&  !array_key_exists ('fastmode', $conf['fastmode']))
+	$fastmode_threshold = $conf['fastmode']['threshold'];
 
 // Setting defaults and converting encodings to lower case
 foreach ($conf['volumes'] as $key => $value)
@@ -155,15 +167,24 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 				]);
 
 				if (($key = array_search($path, $bookmarks)) !== false)
-				    unset($bookmarks[$key]);
+				{
+					unset($bookmarks[$key]);
+					$status = 'OK';
+				}
+				else
+					$status = 'NOK';
 			}
 			else
+			{
 				if (count($bookmarks) >= $conf['bookmarks']['max'])
+				{
 					$info -> set([
 						'msg' => 'Maximum number of bookmarks reached',
 						'level' => 'warning',
 						'feather' => 'slash'
 					]);
+					$status = 'NOK';
+				}
 				else
 				{
 					$info -> set ([
@@ -173,7 +194,9 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 					]);
 
 					$bookmarks[] = $path;
+					$status = 'OK';
 				}
+			}
 			$bookmarks_cookie_value = serialize($bookmarks);
 			setcookie ($bookmarks_cookie_name, $bookmarks_cookie_value);
 		}
@@ -188,11 +211,14 @@ if ($action == 'upload')
 	set_path('POST');
 
 	if ($root == null || $root['upload'] == 'no')
+	{
 		$info -> set ([
 			'msg' => 'Upload not allowed in this directory',
 			'feather' => 'slash',
 			'level' => 'danger'
 		]);
+		$status = 'NOK';
+	}
 	else
 	{
 		$name = $_FILES["fileToUpload"]["name"];
@@ -200,27 +226,39 @@ if ($action == 'upload')
 		$ext  = strtolower(pathinfo($name,PATHINFO_EXTENSION));
 
 		if (strlen ($name) == 0)
+		{
 			$info -> set ([
 				'msg' => 'No file selected for upload',
 				'level' => 'warning',
 				'feather' => 'slash'
 			]);
+			$status = 'NOK';
+		}
 		else
 		{
 			$target_file = $path . '/' . $name;
 
-			if (move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file))
+			if (@move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file))
+			{
 				$info -> set ([
 					'msg' => 'File successfuly uploaded',
 					'level' => 'success',
 					'feather' => 'check-circle'
 				]);
+				$status = 'OK';
+			}
 			else
+			{
+				// $_FILES["fileToUpload"]["error"] might contain an error number
+				// from 1 to 8, or zero
+				// for instance, attempting to override a file without appropriate perms will lead to code 0
 				$info -> set ([
 					'msg' => 'Upload failure',
 					'level' => 'danger',
 					'feather' => 'alert-triangle'
 				]);
+				$status = 'NOK';
+			}
 		}
 	}
 }
@@ -234,16 +272,18 @@ if ($action == 'confirm-delete')
 	set_pageno();
 
 	if ($root == null || $root['delete'] == 'no')
+	{
+		$status = 'NOK';
 		$info -> set ([
 			'msg' => 'Deletion is not allowed in this directory',
 			'feather' => 'slash',
 			'level' => 'danger'
 		]);
+	}
 	else
 	{
-		global $pageno;
-		$no_link = make_link ([ 'page'=>$pageno+1 ]);
-		$yes_link = make_link ([ 'page'=>$pageno+1, 'file' => $file, 'action' => 'delete' ]);
+		$no_link = make_link ([ ]);
+		$yes_link = make_link ([ 'file' => $file, 'action' => 'delete' ]);
 
 		$buttons = [ ];
 		$buttons[] = '<a class="btn btn-primary" href="'.$yes_link.'" role="button">Yes</a>';
@@ -255,6 +295,7 @@ if ($action == 'confirm-delete')
 			'level' => 'warning',
 			'buttons' => $buttons
 		]);
+		$status = 'OK';
 	}
 }
 
@@ -266,25 +307,34 @@ if ($action == 'delete')
 {
 	set_path();
 	if ($root == null || $root['delete'] == 'no')
+	{
 		$info -> set ([
 			'msg' => 'This action is not allowed',
 			'feather' => 'slash',
 			'level' => 'danger'
 		]);
+		$status = 'NOK';
+	}
 	else
 	{
 		if (@unlink($pathname))
+		{
 			$info -> set ([
 				'msg' => 'File ' .$file. ' deleted', // TODO: utf8_encode
 				'level' =>  'success',
 				'feather' => 'check-circle'
 			]);
+			$status = 'OK';
+		}
 		else
+		{
 			$info -> set ([
 				'msg' => 'Deletion failed',
 				'level' => 'danger',
 				'feather' => 'alert-triangle'
 			]);
+			$status = 'NOK';
+		}
 	}
 }
 
@@ -296,11 +346,35 @@ if ($action == 'export')
 	set_path();
 	if ($conf['csv']['enabled'] == 'yes' && is_dir_allowed ($path))
 	{
-		$filename = get_basename ($path) . '.csv';
-		header('Content-Type: application/octet-stream');
+		$p = new filename ($path);
+		$filename = $p -> get_basename ($path) . '.csv';
+
+		//header('Content-Type: application/octet-stream');
+		header('Content-Type: text/csv');
 		header("Content-Transfer-Encoding: Binary"); 
 		header("Content-disposition: attachment; filename=\"" . $filename . "\""); 
+
+		// Insert the UTF-8 BOM in the file
+		// always do that, as native iso-8859-1 directories will be exported as utf-8
+		$bom = chr(0xEF) . chr(0xBB) . chr(0xBF);
+		echo $bom;
+
 		csv_to_stdout ($path); 
+
+		$status = 'OK';
+
+		if (array_key_exists ('log', $conf)
+		&&  array_key_exists ('file', $conf['log']))
+		{
+			$log = new log($conf['log']['file']);
+			try
+			{
+				$log -> log([ $action, $path, '', $status ]);
+			} catch (Exception $e) {
+			global_failure ($e -> getMessage() );
+			}
+		}
+
 		die();
 	}
 
@@ -309,6 +383,7 @@ if ($action == 'export')
 		'feather' => 'slash',
 		'msg' => 'Operation not permitted'
 	]);
+	$status = 'NOK';
 }
 //==============================================================
 // Download a file
@@ -318,12 +393,32 @@ if ($action == 'download')
 	set_path();
 	if ($root != null && $root['download'] == 'yes')
 	{
-		header('Content-Type: application/octet-stream');
-		header("Content-Transfer-Encoding: Binary"); 
-		header("Content-disposition: attachment; filename=\"" . $file . "\""); 
-		header("Content-Length: " . filesize($pathname));
-		readfile($pathname); 
-		die();
+		$sz = @filesize($pathname);
+		$type = @filetype ($pathname);
+
+		if ($type == 'file')
+		{
+			header('Content-Type: application/octet-stream');
+			header("Content-Transfer-Encoding: Binary"); 
+			header("Content-disposition: attachment; filename=\"" . $file . "\""); 
+			header("Content-Length: " . $sz);
+			readfile($pathname); 
+
+			$status = 'OK';
+			if (array_key_exists ('log', $conf)
+			&&  array_key_exists ('file', $conf['log']))
+			{
+				$log = new log($conf['log']['file']);
+				try
+				{
+					$log -> log([ $action, $path, $file, $status ]);
+				} catch (Exception $e) {
+				global_failure ($e -> getMessage() );
+				}
+			}
+
+			die();
+		}
 	}
 
 	$info -> set ([
@@ -331,38 +426,82 @@ if ($action == 'download')
 		'feather' => 'slash',
 		'msg' => 'Operation not permitted'
 	]);
+	$status = 'NOK';
 }
 
 //==============================================================
-// Function used
+// Functions used
 //==============================================================
 
+// return applicable array among GET, POST, REQUEST, COOKIE
 function
-set_orderby(): void
+get_origin (string $origin): ?array
+{
+	$from = null;
+
+	switch ($origin)
+	{
+	case 'GET' :
+		$from = $_GET;
+		break;
+	case 'POST' :
+		$from = $_POST;
+		break;
+	case 'REQUEST' :
+		$from = $_REQUEST;
+		break;
+	case 'COOKIE' :
+		$from = $_COOKIE;
+		break;
+	}
+
+	return $from;
+}
+
+function
+set_orderby(string $origin = 'GET'): void
 {
 	global $orderby, $order;
 
-	if (array_key_exists ('orderby', $_GET) && is_valid_orderby ($_GET['orderby']))
-		$orderby = $_GET['orderby'];
+	$from = get_origin ($origin);
+	if (is_null ($from))
+		$from = [ ];
+
+	if (array_key_exists ('orderby', $from) && is_valid_orderby ($from['orderby']))
+		$orderby = $from['orderby'];
 	else
 		$orderby = 'name';
 
-	if (array_key_exists ('order', $_GET) && is_valid_order ($_GET['order']))
-		$order = $_GET['order'];
+	if (array_key_exists ('order', $from) && is_valid_order ($from['order']))
+		$order = $from['order'];
 	else
 		$order = 'asc';
 }
 
 function
-set_filters(): void
+set_filters(string $origin = 'GET'): void
 {
-	global $filters;
+	global $booleanfilters;
 
-	foreach ($filters as $filtername=>$filter)
-		if (array_key_exists ($filtername, $_GET))
-			$filters[$filtername]['value'] = ($_GET[$filtername] == '1');
+	$from = get_origin ($origin);
+	if (is_null ($from))
+		$from = [ ];
+
+	foreach ($booleanfilters as $filtername=>$booleanfilter)
+		if (array_key_exists ($filtername, $from))
+			$booleanfilters[$filtername]['value'] = ($from[$filtername] == '1');
 		else
-			$filters[$filtername]['value'] = true;
+			$booleanfilters[$filtername]['value'] = true;
+
+	global $filter;
+	if (array_key_exists ('filter', $from))
+	{
+		$filter = $from['filter'];
+		if ($filter == '')
+			$filter = '*';
+	}
+	else
+		$filter = '*';
 }
 
 // this function sets $path, $file and $pathname globals
@@ -374,19 +513,13 @@ set_filters(): void
 function
 set_path(string $origin = 'GET'): void
 {
-	global $path, $queried_path, $file, $pathname, $error;
+	global $path, $file, $pathname, $error;
 
 	$path = $file = '';
 
-	switch ($origin)
+	$from = get_origin ($origin);
+	if (is_null ($from))
 	{
-	case 'GET' :
-		$from = $_GET;
-		break;
-	case 'POST' :
-		$from = $_POST;
-		break;
-	default :
 		$error -> set ([
 			'msg' => 'Invalid origin',
 			'level' => 'danger',
@@ -400,7 +533,6 @@ set_path(string $origin = 'GET'): void
 
 	// we have a path
 	$path = rawurldecode ($from['path']);
-	$queried_path = $path;
 
 	// do we also have a file ?
 	if (array_key_exists('file', $from) && ($from['file'] != ''))
@@ -455,21 +587,26 @@ die();
 	$root = get_volume ($path);
 }
 
-// set pageno from $_GET array
+// set pageno from $_GET or $_POST or $_REQUEST array
 function
-set_pageno(): void
+set_pageno(string $origin = 'GET'): void
 {
 	global $pageno, $nbpages;
 
-	if (array_key_exists ('page', $_GET) && is_numeric($_GET['page']))
-		$pageno = ($_GET['page'] - 1);
+	$from = get_origin ($origin);
+
+	if (array_key_exists ('page', $from) && is_numeric($from['page']))
+		$pageno = ($from['page'] - 1);
 	else
 		$pageno = 0;
 
+	if ($nbpages == 0)
+		$pageno = 0;
+	else
+		if ($pageno >= $nbpages)
+			$pageno = $nbpages - 1;
 	if ($pageno < 0)
 		$pageno = 0;
-	if ($pageno >= $nbpages)
-		$pageno = $nbpages - 1;
 }
 
 // true if this field is a valid order criteria
@@ -525,7 +662,7 @@ csv_to_stdout (string $path): void
 			switch ($column)
 			{
 			case 'Filename' :
-				echo $file['name-8859-1'];
+				echo $file['name-utf8'];
 				break;
 			case 'Size' :
 				if ($file['type'] == 'file')
@@ -590,7 +727,7 @@ authenticate (): void
 		return;
 	}
 
-	$ldapconn = ldap_connect($conf['ldap']['server'],$conf['ldap']['port']);
+	$ldapconn = @ldap_connect($conf['ldap']['server'],$conf['ldap']['port']);
 	if (!$ldapconn)
 	{
 		$info -> set ([
@@ -607,7 +744,7 @@ authenticate (): void
 	$pattern = $conf['ldap']['pattern'];
 	$dn = str_replace ('{login}', $login, $pattern);
 
-	$lb = ldap_bind($ldapconn,$dn,$password);
+	$lb = @ldap_bind($ldapconn,$dn,$password);
 
 	ldap_close($ldapconn);
 
@@ -631,8 +768,8 @@ send_html_head(): void
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <meta name="description" content="">
-    <meta name="author" content="">
+    <meta name="description" content="filebrowser">
+    <meta name="author" content="willycat">
     <link rel="icon" href="images/folder.png" />
 
     <title>File browsing '.$ver.'</title>
@@ -646,6 +783,7 @@ send_html_head(): void
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
 <link rel="stylesheet" href="css/filebrowser.css">
 <link rel="stylesheet" href="css/check-box.css">
+<script src="js/filebrowser.js"></script>
 
   </head>
 ';
@@ -794,14 +932,46 @@ get_dir_content (): void
 	});
 }
 
+
+function
+extend (array &$a): void
+{
+	$pathname = $a['pathname'];
+
+	if ($a['type'] == 'file')
+	{
+		$a['size'] = @filesize ($pathname);
+		$a['size-display'] = formatBytes($a['size']);
+		$total_size_used += $a['size'];
+	}
+	else
+	{
+		$a['size'] = 0;
+		$a['size-display'] = '';
+	}
+	$a['perms'] = formatPerms ($pathname);
+	$a['mtime'] = @filemtime ($pathname);
+	if ($a['mtime'])
+		$a['mtime-display'] = strftime ('%F %T', $a['mtime']);
+	else
+		$a['mtime-display'] = '';
+	$a['ctime'] = @filectime ($pathname);
+	if ($a['ctime'])
+		$a['ctime-display'] = strftime ('%F %T', $a['ctime']);
+	else
+		$a['ctime-display'] = '';
+}
 // reads $path
 function
 parse_dir (): void
 {
 	global $error;
-	global $conf, $path, $files, $queried_path;
+	global $conf, $path, $files;
 	global $root;
-	global $filters;
+	global $booleanfilters;
+	global $total_size_used;
+	global $filter;
+	global $status;
 
 	//-------------------
 	// checks is the user is allowed to display this directory
@@ -811,10 +981,11 @@ parse_dir (): void
 	if ($root == null)
 	{
 		$error -> set ([
-			'msg' => 'You are not allowed to view this directory ('.$path.')', // TODO: utf8
+			'msg' => 'You are not allowed to view this directory',
 			'level' =>  'danger',
 			'feather' => 'slash'
 		]);
+		$status = 'NOK';
 		return;
 	}
 
@@ -829,6 +1000,7 @@ parse_dir (): void
 			'level' => 'danger',
 			'feather' => 'slash'
 		]);
+		$status = 'NOK';
 		return;
 	}
 
@@ -842,6 +1014,19 @@ parse_dir (): void
 	// attempt to read content
 	//-------------------
 
+	$dirfiles = @scandir ($path);
+	if ($dirfiles === false)
+	{
+		$error -> set ([
+			'msg' => 'Cannot read directory', // use same message for non-exitent and unreadable
+			'level' => 'danger',
+			'feather' => 'alert-triangle'
+		]);
+		$status = 'NOK';
+		return;
+	}
+
+	/*
 	$dh = opendir ($path);
 	if (!$dh)
 	{
@@ -850,6 +1035,7 @@ parse_dir (): void
 			'level' => 'danger',
 			'feather' => 'alert-triangle'
 		]);
+		$status = 'NOK';
 		return;
 	}
 
@@ -858,7 +1044,17 @@ parse_dir (): void
 	$i = 0;
 	while (($file = readdir ($dh)) !== false)
 	{
-//echo "FILE=" . $file . '<br>';
+	*/
+
+	global $fastmode;
+	if (count ($dirfiles) > $fastmode_threshold)
+		$fastmode = true;
+	else
+		$fastmode = false;
+
+	$i = 0;
+	foreach ($dirfiles as $file)
+	{
 		if ($file == '.' || $file == '..')
 			continue;
 
@@ -869,6 +1065,7 @@ parse_dir (): void
 		$pathname = $path . '/' . $file;
 
 		$a = [ ];
+		$a['pathname'] = $pathname;
 
 		// name => FS encoding (can be used to access file)
 		// name-utf8 => UTF-8 (can be used for HTML display)
@@ -887,28 +1084,9 @@ parse_dir (): void
 		}
 
 		$a['type'] = @filetype ($pathname);
-		if ($a['type'] == 'file')
-		{
-			$a['size'] = @filesize ($pathname);
-			$a['size-display'] = formatBytes($a['size']);
-			$total_size_used += $a['size'];
-		}
-		else
-		{
-			$a['size'] = 0;
-			$a['size-display'] = '';
-		}
-		$a['perms'] = formatPerms ($pathname);
-		$a['mtime'] = @filemtime ($pathname);
-		if ($a['mtime'])
-			$a['mtime-display'] = strftime ('%F %T', $a['mtime']);
-		else
-			$a['mtime-display'] = '';
-		$a['ctime'] = @filectime ($pathname);
-		if ($a['ctime'])
-			$a['ctime-display'] = strftime ('%F %T', $a['ctime']);
-		else
-			$a['ctime-display'] = '';
+		if (!$fastmode)
+			extend ($a);
+
 		if ($a['type'] == 'link')
 		{
 			$linktarget = readlink ($pathname);
@@ -919,14 +1097,28 @@ parse_dir (): void
 			$a['target'] = $p -> get_real_pathname();
 		}
 
-		if ($a['type'] == 'dir' && !$filters['showdir']['value'])
+		if ($a['type'] == 'dir' && !$booleanfilters['showdir']['value'])
 			continue;
-		if ($a['type'] == 'file' && !$filters['showfiles']['value'])
+		if ($a['type'] == 'file' && !$booleanfilters['showfiles']['value'])
+			continue;
+		if (!filter_match ($a['name-utf8'], $filter))
 			continue;
 
 		$files[$i++] = $a;
 	}
+
+	/*
 	closedir ($dh);
+	*/
+}
+
+function
+filter_match (string $str, string $filter): bool
+{
+	if ($filter == '' || $filter == '*')
+		return true;
+
+	return fnmatch ($filter, $str);
 }
 
 //----------------------------------------------------------
@@ -946,7 +1138,7 @@ global_failure(string $msg): void
 <h1 class="display-3">Error !</h1>
 <p>
 ';
-	display_error ($msg, 'danger', 'alert-triangle');
+	echo $msg;
 	echo '
 </p>
 </div>
@@ -1020,9 +1212,7 @@ display_action(string $action, array $file, array $root): void
 		{
 			$feather = 'trash';
 			$title = 'Delete file';
-			global $pageno;
 			$action_link = make_link ([
-				'page' => $pageno+1,
 				'action' => 'confirm-delete',
 				'file' => $file['name']
 			]);
@@ -1033,9 +1223,7 @@ display_action(string $action, array $file, array $root): void
 		{
 			$feather = 'download';
 			$title = 'Download file';
-			global $pageno;
 			$action_link = make_link ([
-				'page' => $pageno+1,
 				'action' => 'download',
 				'file' => $file['name']
 			]);
@@ -1064,15 +1252,23 @@ display_actions (array $file, array $root): void
 }
 
 function
-display_column (array $file, string $column, array $root): void
+display_column (int $linenum, int $from, int $to, array $file, string $column, array $root): void
 {
 	global $path;
+	global $fastmode;
+
+	if ($fastmode)
+		extend ($file);
 
 	$a_open = false;
 
 	echo '<td class="col-'.strtolower($column).'">';
 	switch ($column)
 	{
+	case 'checkbox' :
+		if ($file['type'] == 'file')
+			echo '<input type="checkbox" id="L'.($linenum+1).'" onClick="showHideGroupActions('.$from.','.$to.')">';
+		break;
 	case 'Filename' :
 		if ($file['type'] == 'dir')
 		{
@@ -1112,7 +1308,8 @@ display_column (array $file, string $column, array $root): void
 		echo $file['type'];
 		break;
 	case 'actions' :
-		display_actions( $file, $root);
+		if ($file['type'] == 'file') // if empty, unreadable, if <> 'file', might not be suitable
+			display_actions( $file, $root);
 		break;
 	default :
 		echo '?';
@@ -1124,11 +1321,14 @@ display_column (array $file, string $column, array $root): void
 }
 
 function
-display_line (int $i, array $file, array $columns, array $root): void
+display_line (int $linenum, int $from, int $to, array $file, array $columns, array $root): void
 {
+	if ($from == -1)
+		return;
+
 	echo '<tr>';
 	foreach ($columns as $column)
-		display_column ($file, $column, $root);
+		display_column ($linenum, $from, $to, $file, $column, $root);
 	echo '</tr>';
 }
 
@@ -1140,16 +1340,27 @@ make_js_link (array $parms): string
 }
 
 function
-make_link (array $parms): string
+make_link (array $parms, string $format='get', array $exclude = []): string
 {
 	// fill missing entries
-	$parmskeys = [ 'path', 'page', 'orderby', 'order', 'action', 'file' ];
+	$parmskeys = [ 'path', 'orderby', 'order', 'file', 'filter' ];
 	foreach ($parmskeys as $parmkey)
 		if (!array_key_exists ($parmkey, $parms))
 			$parms[$parmkey] = '';
 
+	if (!array_key_exists ('action', $parms))
+		$parms['action'] = 'list';
+
+	if (!array_key_exists ('page', $parms))
+	{
+		global $pageno;
+		$parms['page'] = ($pageno+1);
+	}
+
 	// re-use current settings
-	global $orderby, $order, $path;
+	global $orderby, $order, $path, $filter;
+	if ($parms['filter'] == '')
+		$parms['filter'] = $filter;
 	if ($parms['orderby'] == '')
 		$parms['orderby'] = $orderby;
 	if ($parms['order'] == '')
@@ -1158,18 +1369,34 @@ make_link (array $parms): string
 		$parms['path'] = $path;
 
 	// if not set to a special value, then re use current parms
-	global $filters;
-	foreach ($filters as $filtername=>$filter)
+	global $booleanfilters;
+	foreach ($booleanfilters as $filtername=>$booleanfilter)
 		if (!array_key_exists ($filtername, $parms))
-			$parms[$filtername] = ($filters[$filtername]['value'] ? '1' : '0' );
+			$parms[$filtername] = ($booleanfilters[$filtername]['value'] ? '1' : '0' );
 
-	// encode each part
-	$urlparts = [ ];
-	foreach ($parms as $key => $value)
-		$urlparts[] = $key . '=' . rawurlencode ($parms[$key]);
+	switch ($format)
+	{
+	case 'get' :
+		// encode each part
+		$urlparts = [ ];
+		foreach ($parms as $key => $value)
+			if (!in_array ($key, $exclude))
+				$urlparts[] = $key . '=' . rawurlencode ($parms[$key]);
 
-	// paste parts together
-	$link = '?' . implode ('&', $urlparts);
+		// paste parts together
+		$link = '?' . implode ('&', $urlparts);
+		break;
+
+	case 'post' :
+		// encode each part
+		$urlparts = [ ];
+		foreach ($parms as $key => $value)
+			if (!in_array ($key, $exclude))
+				$urlparts[] = '<input type="hidden" name="' . $key . '" value="' . htmlspecialchars ($parms[$key]) . '">'; // TODO : pas rawurlencode
+		// paste parts together
+		$link = implode ("\n", $urlparts);
+		break;
+	}
 
 	return $link;
 }
@@ -1401,7 +1628,7 @@ display_upload_form(): void
 function
 show_breadcrumb(): void
 {
-	global $path, $pageno, $conf;
+	global $path, $conf;
 
 	if ($path == '')
 		return;
@@ -1415,7 +1642,6 @@ show_breadcrumb(): void
 	if ($conf['bookmarks']['enabled'] == 'yes')
 	{
 		echo '<A HREF="'.make_link([
-			'page' => $pageno+1,
 			'action' => 'bookmark'
 		]).'" title="Bookmark this directory">';
 		echo '<span';
@@ -1435,13 +1661,21 @@ show_breadcrumb(): void
 		// get_volume() has to be called at each level
 		// as encoding can change due to mount points with different encodings
 		$root = get_volume ($linkpath);
-		if ($root['encoding'] == 'iso-8859-1')
-			$dirlevel_utf8 = utf8_encode($dirlevel);
-		else
+		if ($root == null)	// not allowed
+		{
 			$dirlevel_utf8 = $dirlevel;
+			echo '<li class="breadcrumb-item">' . $dirlevel_utf8 . '</li>';
+		}
+		else
+		{
+			if ($root['encoding'] == 'iso-8859-1')
+				$dirlevel_utf8 = utf8_encode($dirlevel);
+			else
+				$dirlevel_utf8 = $dirlevel;
 
-		$link = make_link ([ 'page' => 1, 'path' => $linkpath ]);
-		echo '<li class="breadcrumb-item"><A HREF="' . $link . '" title="'.$linkpath.'">' . $dirlevel_utf8 . '</a></li>';
+			$link = make_link ([ 'page' => 1, 'path' => $linkpath ]);
+			echo '<li class="breadcrumb-item"><A HREF="' . $link . '" title="'.$linkpath.'">' . $dirlevel_utf8 . '</a></li>';
+		}
 	}
 	?>
 	</ul>
@@ -1452,26 +1686,29 @@ show_breadcrumb(): void
 function
 display_checkboxes_and_pagination(): void
 {
-	global $filters;
+	global $booleanfilters;
 	global $pageno, $nbpages;
 ?>
 <div class="">
   <div class="row justify-content-around">
 <?php
-	foreach ($filters as $filtername=>$filter)
+	foreach ($booleanfilters as $filtername=>$booleanfilter)
 	{
 ?>
     <div class="col-md-auto">
       <?= display_checkbox([
-	'label' => $filter['label'],
+	'label' => $booleanfilter['label'],
 	'name' => $filtername,
-	'checked' => $filter['value'],
+	'checked' => $booleanfilter['value'],
 	'id' => $filtername
 	]); ?>
     </div>
 <?php
 	}
 ?>
+    <div class="col-md-auto" id="multi">
+MULTI
+    </div>
 
     <div class="col-sm">
 	<?php show_pagination ($pageno, $nbpages); ?>
@@ -1495,12 +1732,23 @@ display_files (): void
 	global $conf;
 	$columns = $conf['display']['columns'];
 	$n = count($files);
+
+	if ($n == 0)	// no data
+		$from = $to = -1;
+	else
+	{
+		// global indexes displayed on this page
+		$from = $pageno * $conf['display']['pagesize'];
+		$to = min ($n-1, ($pageno+1)* $conf['display']['pagesize'] -1);
+	}
 ?>
           <div class="table-responsive">
             <table class="table table-striped table-sm">
               <thead>
                 <tr>
 <?php
+global $fastmode;
+
 foreach ($columns as $column)
 {
 	$add = '';
@@ -1508,26 +1756,30 @@ foreach ($columns as $column)
 		$add = 'width=100';
 	echo '<th ' . $add . '>';
 
+	$sortname = '';
 	switch ($column)
 	{
+	case 'checkbox' :
+		echo '<input type="checkbox" onClick="revertSelection('.$from.','.$to.')" id="LREVERT">';
+		break;
 	case 'Filename' :
 		$sortname = 'name';
 		break;
 	case 'Size' :
-		$sortname = 'size';
+		if (!$fastmode)
+			$sortname = 'size';
 		break;
 	case 'mtime' :
-		$sortname = 'mtime';
+		if (!$fastmode)
+			$sortname = 'mtime';
 		break;
 	default:
-		$sortname = '';
 		break;
 	}
 
 	if ($sortname != '')
 	{
 		$new_order = (($order == 'asc') ? 'desc' : 'asc');
-		//$sortlink = make_link($pageno+1, '', '', $sortname, $new_order);
 		$sortlink = make_link([
 			'page' => 1,
 			'orderby' => $sortname,
@@ -1538,7 +1790,8 @@ foreach ($columns as $column)
 		echo '</a>';
 	}
 	else
-		echo $column;
+		if ($column != 'checkbox')
+			echo $column;
 
 	if ($sortname == $orderby) // show a mark indicating this column is current sort
 	{
@@ -1555,12 +1808,13 @@ foreach ($columns as $column)
 <?php
 $root = get_volume ($path);
 $page_size_used = 0;
-for ($lineno = 0, $i = ($pageno * $conf['display']['pagesize']); ($lineno < $conf['display']['pagesize']) && ($i < $n); $i++, $lineno++)
-{
-	if ($files[$i]['type'] == 'file')
-		$page_size_used += $files[$i]['size'];
-	display_line ($i, $files[$i], $columns, $root);
-}
+if ($n > 0) // some data
+	for ($lineno = 0, $i = $from; $i <= $to; $i++, $lineno++)
+	{
+		if ($files[$i]['type'] == 'file')
+			$page_size_used += $files[$i]['size'];
+		display_line ($i, $from, $to, $files[$i], $columns, $root);
+	}
 ?>
               </tbody>
             </table>
@@ -1568,17 +1822,21 @@ for ($lineno = 0, $i = ($pageno * $conf['display']['pagesize']); ($lineno < $con
 <?php
 global $total_size_used;
 global $footer;
-$fotter = '';
+global $microstart;
+$microduration = microtime(true) - $microstart;
+$footer = '';
 $footer .= "Displaying page ".($pageno+1)."/".$nbpages." sorted on ".$orderby." in ".$order." order";
 if ($n > 0)
 {
-	$footer .= " - Files " . (1+$pageno * $conf['display']['pagesize']) . ' - ' . min($n, ($pageno+1)*$conf['display']['pagesize']) . ' out of ' . $n;
+	$footer .= " - Files " . (1+$from) . ' - ' . (1+$to) . ' out of ' . $n;
 	$footer .= ' - ' . "Page contains " . formatBytes($page_size_used,2) . ' out of ' . formatBytes($total_size_used,2);
 }
 $footer .= ' - Native encoding: ' . $root['encoding'];
 $footer .= '&nbsp;&nbsp;' . csv_button ();
 if ($root['upload'] == 'yes')
 	$footer .= '  ' . upload_button();
+//global $fastmode;
+//$footer .= '<BR>Took ' . sprintf('%.2f', $microduration) . ' s (fastmode ' . ($fastmode ? 'on' :'off') . ')';
 }
 
 //==========================================================
@@ -1587,7 +1845,7 @@ if ($root['upload'] == 'yes')
 
 $debugstr = '';
 if ($path == '')
-	set_path();
+	set_path('REQUEST');
 if ($path == '')
 {
 	$error -> set ([
@@ -1597,15 +1855,28 @@ if ($path == '')
 }
 else
 {
-	set_filters();
+	set_filters('REQUEST');
 	get_dir_content ();
-	set_pageno();
+	set_pageno('REQUEST');
+}
+
+if (array_key_exists ('log', $conf)
+&&  array_key_exists ('file', $conf['log']))
+{
+	$log = new log($conf['log']['file']);
+	try
+	{
+		$log -> log([ $action, $path, $file, $status ]);
+	} catch (Exception $e) {
+		global_failure ($e -> getMessage() );
+	}
 }
 
 send_html_head();
 ?>
 
   <body>
+	<form name="filter" method="POST" action="index.php">
     <nav class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0">
       <a class="navbar-brand col-sm-3 col-md-2 mr-0" href="<?=$conf['title']['url'] ?>" alt="<?=$conf['title']['text'] ?>" title="<?=$conf['title']['text'] ?>">
 <?php
@@ -1615,14 +1886,14 @@ send_html_head();
 		echo htmlentities($conf['title']['text']);
 ?>
 	</a>
-	<!--
-      <input class="form-control form-control-dark w-100" type="text" placeholder="Search" aria-label="Search">
-	-->
+	<?= make_link ([ 'page' => 1 ], 'post', [ 'filter' ]) ?>
+      <input class="form-control form-control-dark w-100" type="text" placeholder="Filter" aria-label="Filter" name="filter" value="<?=htmlspecialchars($filter)?>">
       <ul class="navbar-nav px-3">
         <li class="nav-item text-nowrap">
         </li>
       </ul>
     </nav>
+	</form>
 
     <div class="container-fluid">
       <div class="row">
@@ -1738,6 +2009,7 @@ if ($conf['auth'] == 'ldap') {
 <?php if ($use_dropdowns) { ?>
 $('.dropdown-toggle').dropdown();
 <?php } ?>
+		hideGroupActions();
             });
     </script>
 

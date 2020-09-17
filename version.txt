@@ -60,3 +60,23 @@ Date        Version  Changement
                      CSS for checkboxes from https://bootsnipp.com/partha2u
 2020-08-10     1.17  fix issue with login form
 2020-08-10     1.18  prevent errors when no perm allowed
+2020-08-10     1.19  dir total size was zero
+2020-08-10     1.20  forbidden directories are no longer shown as links
+                     no action displayed if file is not readable or line is not a file
+                     fixed broken CSV download
+                     CSV: changed content type to text/csv
+                     CSV: always export as utf-8
+                     CSV: added UTF8 BOM in file
+2020-08-10     1.21  changed classes location
+2020-08-10     1.22  fixed issue with display on FF
+2020-08-25     1.23  new feature in progress: filtering
+                     does not supports wildcards yet
+2020-08-25     1.24  widcard support (uses fnmatch() )
+2020-08-26     1.25  wip: actions on multiple files
+2020-08-28     1.26  progress on wip
+2020-09-01     1.27  new optional section in conf.json: log
+                     if filled, will log all actions to a file
+2020-09-17     1.28  to prevent timeout when dealing with huge directories
+                     added a new parm: threshold
+                     if directories has more entries that threshold, sorting on size and mtime
+                     is disabled - this avoid reading size and mtime for all entries,
