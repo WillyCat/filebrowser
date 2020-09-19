@@ -9,6 +9,9 @@
                 "enabled": "yes",
                 "max": 15
         },
+	"fastmode": {
+		"threshold": 5000
+	},
         "auth": "ldap",
         "ldap": {
                 "server": "your.ldap.server",

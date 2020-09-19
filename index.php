@@ -952,7 +952,7 @@ extend (array &$a): void
 
 	if ($a['type'] == 'file')
 	{
-		$a['size'] = @filesize ($pathname);
+		$a['size'] = filesize ($pathname);
 		$a['size-display'] = formatBytes($a['size']);
 		$total_size_used += $a['size'];
 	}
@@ -1115,9 +1115,7 @@ parse_dir (): void
 		}
 
 		$a['type'] = @filetype ($pathname);
-		if (!$fastmode)
-			extend ($a);
-		else
+		if ($fastmode)
 		{
 			// in fast mode, read only extended attributes used for filtering
 			switch ($filtertype)
@@ -1127,6 +1125,8 @@ parse_dir (): void
 				break;
 			}
 		}
+		else // in normal mode, read all attributes
+			extend ($a);
 
 		if ($a['type'] == 'link')
 		{
@@ -1332,8 +1332,8 @@ filter_mtime_compile (string $filterstring): array
 function
 last_day_of_month (string $yyyy_mm): string
 {
-	return '31';
-	// TODO: compute it !
+	$d = new DateTime( $yyyy_mm . '-01' ); 
+	return $d->format( 't' );
 }
 
 function

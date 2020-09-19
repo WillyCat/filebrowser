@@ -5,13 +5,10 @@ RUN \
     rm -rf /var/lib/apt/lists/* && \
     docker-php-ext-configure ldap --with-libdir=lib/x86_64-linux-gnu/ && \
     docker-php-ext-install ldap
-COPY version /var/www/html/
-COPY *.php /var/www/html/
-RUN mkdir /var/www/html/classes
-COPY classes/*.php /var/www/html/classes/
-RUN mkdir /var/www/html/css
-COPY css/*.css* /var/www/html/css/
-RUN mkdir /var/www/html/images
-COPY images/* /var/www/html/images/
-RUN mkdir /etc/filebrowser
+RUN mkdir /etc/filebrowser /var/www/html/js /var/www/html/classes /var/www/html/css /var/www/html/images
 COPY conf.json.sample /etc/filebrowser/conf.json
+COPY images/* /var/www/html/images/
+COPY js/*.js* /var/www/html/js/
+COPY css/*.css* /var/www/html/css/
+COPY classes/*.php /var/www/html/classes/
+COPY *.php version /var/www/html/

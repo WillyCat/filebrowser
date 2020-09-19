@@ -82,3 +82,5 @@ Date        Version  Changement
                      is disabled - this avoid reading size and mtime for all entries,
 2020-09-17     1.29  fixed git merge issue
 2020-09-17     1.30  added filtering on mtime (wip, not a useable version)
+2020-09-17     1.31  completed filtering
+                     optimized Dockerfile (14 > 9 layers)
