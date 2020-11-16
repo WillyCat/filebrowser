@@ -1,4 +1,4 @@
 #!/bin/bash
-docker stop fb
-docker rm -f fb
+docker stop filebrowser
+docker rm -f filebrowser
 exit 0

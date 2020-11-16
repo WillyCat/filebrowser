@@ -84,3 +84,4 @@ Date        Version  Changement
 2020-09-17     1.30  added filtering on mtime (wip, not a useable version)
 2020-09-17     1.31  completed filtering
                      optimized Dockerfile (14 > 9 layers)
+2020-09-11     1.32  1.28 introduced a new parameter - it was mandatory in conf - now has a default

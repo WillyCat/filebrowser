@@ -86,7 +86,7 @@ body {
   position: -webkit-sticky;
   _position: sticky;
   position: fixed;
-  top: 48px; /* Height of navbar */
+  top: 60px; /* Height of navbar */
   height: calc(100vh - 48px);
   padding-top: .5rem;
   overflow-x: hidden;

@@ -84,8 +84,9 @@ if (!array_key_exists ('volumes', $conf))
 if (count ($conf['volumes']) == 0)
 	global_failure ('no volume configured');
 
-if (!array_key_exists ('fastmode', $conf)
-&&  !array_key_exists ('fastmode', $conf['fastmode']))
+// overwrite default with configured value, if set
+if (array_key_exists ('fastmode', $conf)
+&&  array_key_exists ('threshold', $conf['fastmode']))
 	$fastmode_threshold = $conf['fastmode']['threshold'];
 
 // Setting defaults and converting encodings to lower case
@@ -2112,8 +2113,8 @@ send_html_head();
 
   <body>
 	<form name="filter" method="POST" action="index.php">
-    <nav class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0">
-      <a class="navbar-brand col-sm-3 col-md-2 mr-0" href="<?=$conf['title']['url'] ?>" alt="<?=$conf['title']['text'] ?>" title="<?=$conf['title']['text'] ?>">
+    <nav class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap ">
+      <a class="navbar-brand bg-dark col-sm-3 col-md-2 mr-0" href="<?=$conf['title']['url'] ?>" alt="<?=$conf['title']['text'] ?>" title="<?=$conf['title']['text'] ?>">
 <?php
 	if ($conf['title']['image'] != '')
 		echo '<img src="' . $conf['title']['image'] . '">';
@@ -2126,7 +2127,7 @@ send_html_head();
       <input class="form-control inputdefault form-control-dark w-100" type="text" placeholder="Filter" aria-label="Filter" name="filter" value="<?=htmlspecialchars($filter)?>">
 </div>
 <div class=" w-25">
-	<select class="" name="filtertype"><option value="Filename" <?=($filtertype=='Filename')?'selected':''?>>Filename</option><option value="mtime" <?=($filtertype=='mtime')?'selected':''?>>mtime</option></select>
+	<select class="custom-select" name="filtertype"><option value="Filename" <?=($filtertype=='Filename')?'selected':''?>>Filename</option><option value="mtime" <?=($filtertype=='mtime')?'selected':''?>>mtime</option></select>
 </div>
       <ul class="navbar-nav px-3">
         <li class="nav-item text-nowrap">
