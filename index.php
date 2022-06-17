@@ -939,7 +939,8 @@ extend_mtime (array &$a): void
 {
 	$a['mtime'] = @filemtime ($a['pathname']);
 	if ($a['mtime'])
-		$a['mtime-display'] = strftime ('%F %T', $a['mtime']);
+		//$a['mtime-display'] = strftime ('%F %T', $a['mtime']);
+		$a['mtime-display'] = date ('Y-m-d H:i:s', $a['mtime']);
 	else
 		$a['mtime-display'] = '';
 }
@@ -966,7 +967,9 @@ extend (array &$a): void
 	extend_mtime ($a);
 	$a['ctime'] = @filectime ($pathname);
 	if ($a['ctime'])
-		$a['ctime-display'] = strftime ('%F %T', $a['ctime']);
+		// strftime is deprecated for php >= 8.1
+		//$a['ctime-display'] = strftime ('%F %T', $a['ctime']); // 2009-05-03 21:34:17
+		$a['ctime-display'] = date ('Y-m-d H:i:s', $a['ctime']);
 	else
 		$a['ctime-display'] = '';
 }
@@ -1367,7 +1370,7 @@ global_failure(string $msg): void
 	send_html_head();
 	echo '
 <body class="text-center">
-<main role="main">
+<main id="main" role="main">
 <div class="jumbotron">
 <div class="container">
 <h1 class="display-3">Error !</h1>
@@ -2207,7 +2210,7 @@ if ($conf['auth'] == 'ldap') {
           </div>
         </nav>
 
-        <main role="main" class="col-md-9 ml-sm-auto col-lg-10 pt-3 px-4">
+        <main id="main" role="main" class="col-md-9 ml-sm-auto col-lg-10 pt-3 px-4">
 
 <?php
 	$info -> display();

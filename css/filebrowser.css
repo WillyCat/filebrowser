@@ -1,3 +1,7 @@
+#main {
+	top: 60px;
+}
+
 .invalid {
 	text-decoration: line-through;
 }
