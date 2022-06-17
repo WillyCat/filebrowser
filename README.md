@@ -21,7 +21,7 @@ Features :
 * log all actions
 
 Built on :
-* bootstrap 4.5
-* jquery 3.2.1
-* PHP 7.4 with ldap functions
+* bootstrap 4.6.1
+* jquery 3.6.0
+* PHP 8.1 with ldap functions
 * Linux
