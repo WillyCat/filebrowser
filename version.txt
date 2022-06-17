@@ -88,6 +88,7 @@ Date        Version  Changement
                      better looking dropdown
 2020-09-17     1.33  top bar now sticky
 2022-06-17     1.34  migrating from php 7.4 to php 8.1
+                     fixed a visual issue where errors and acknowledgements were hidden by top sticky bar
+2022-06-17     1.35  upgrading third party libs
                      jquery 3.5.1 > 3.6.0
                      bootstrap 4.5.1 > 4.6.1
-                     fixed a visual issue where errors and acknowledgements were hidden by top sticky bar
