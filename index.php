@@ -2113,7 +2113,7 @@ send_html_head();
 
   <body>
 	<form name="filter" method="POST" action="index.php">
-    <nav class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap ">
+    <nav class="navbar navbar-dark fixed-top bg-dark flex-md-nowrap ">
       <a class="navbar-brand bg-dark col-sm-3 col-md-2 mr-0" href="<?=$conf['title']['url'] ?>" alt="<?=$conf['title']['text'] ?>" title="<?=$conf['title']['text'] ?>">
 <?php
 	if ($conf['title']['image'] != '')
