@@ -21,7 +21,7 @@ Features :
 * log all actions
 
 Built on :
+* PHP 8.3 with ldap functions
 * bootstrap 4.6.1
 * jquery 3.6.0
-* PHP 8.1 with ldap functions
-* Linux
+* popper.js 1.6.0
