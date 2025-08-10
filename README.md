@@ -19,9 +19,11 @@ Features :
 * configure timezone and charset,
 * bookmark favorite directories (stored locally on browser cookie)
 * log all actions
+* when using ldap authent, volumes can be shown/hidden to a list of groups
+* container healthcheck
 
 Built on :
-* PHP 8.3 with ldap functions
-* bootstrap 4.6.1
-* jquery 3.6.0
-* popper.js 1.6.0
+* apache
+* PHP 8.4 with ldap functions
+* bootstrap 4.6.2
+* jquery 3.7.1

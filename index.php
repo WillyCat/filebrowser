@@ -1,10 +1,11 @@
 <?php
+// v1.41
 require_once 'classes/filename.class.php';
 require_once 'classes/message.class.php';
 require_once 'classes/session.class.php';
 require_once 'classes/log.class.php';
 // GET:
-// action (bookmark, logout)
+// action (bookmark, logout, health, ping)
 // dir [, page]
 // dir, action (export)
 // dir, file, action (download, delete, upload-form)
@@ -17,8 +18,6 @@ $booleanfilters = [
 	'showfiles'=> [ 'label' => 'Files', 'value' => true ],
 	'showdir'=>['label' => 'Directories', 'value' => true ]
 ];
-
-$use_dropdowns = 0;	// dropdown require bootstrap.js + popper.js - if not used, have lighter footprint by not importing them
 
 $path = '';   // dir in FS encoding
 $file = 0; // file in FS encoding
@@ -89,6 +88,10 @@ if (array_key_exists ('fastmode', $conf)
 &&  array_key_exists ('threshold', $conf['fastmode']))
 	$fastmode_threshold = $conf['fastmode']['threshold'];
 
+// if no specific format in conf file, default is json
+if (array_key_exists('log', $conf) && !array_key_exists('format', $conf))
+	$conf['log']['format'] = 'json';
+
 // Setting defaults and converting encodings to lower case
 foreach ($conf['volumes'] as $key => $value)
 {
@@ -104,10 +107,28 @@ foreach ($conf['volumes'] as $key => $value)
 		$conf['volumes'][$key]['upload'] = 'no';
 	if (!array_key_exists ('showhiddenfiles', $conf['volumes'][$key]))
 		$conf['volumes'][$key]['showhiddenfiles'] = 'no';
+	if (!array_key_exists ('showlinks', $conf['volumes'][$key]))
+		$conf['volumes'][$key]['showlinks'] = 'yes';
 }
 
-if (array_key_exists ('tz', $conf))
-	date_default_timezone_set($conf['tz']);
+if (!array_key_exists ('tz', $conf))
+	$conf['tz'] = 'Europe/Paris';
+
+date_default_timezone_set($conf['tz']);
+
+//----------------------------------
+// Health
+//----------------------------------
+if ($action == 'health')
+{
+	echo 'healthy';
+	die();
+}
+if ($action == 'ping')
+{
+	echo 'pong';
+	die();
+}
 
 //----------------------------------
 // Session management
@@ -115,7 +136,25 @@ if (array_key_exists ('tz', $conf))
 $session = new session();
 
 if ($action == 'logout')
+{
+	$username = $session->getLogin();
 	$session -> invalidate();
+
+	if (array_key_exists ('log', $conf)
+	&&  array_key_exists ('file', $conf['log']))
+	{
+		$log = new log($conf['log']['file'], format: $conf['log']['format'], tz: $conf['tz']);
+		try
+		{
+			$log -> log([ 'action'=>$action, 'path'=>'', 'file'=>'', 'status'=>'OK', 'username'=> $username ]);
+		} catch (Exception $e) {
+		global_failure ($e -> getMessage() );
+		}
+	}
+	show_login_form();
+	add_feather();
+	die();
+}
 
 // if changing auth method to ldap, sessions already open
 // and gained with no auth are no longer valid
@@ -138,10 +177,37 @@ if (!$session -> is_valid())
 		if (!$session -> is_valid())
 		{
 			show_login_form();
+			add_feather();
 			die();
 		}
 	}
 }
+
+//----------------------------------
+// Group based limitations
+//----------------------------------
+
+// if some volumes are restricted to a subset of ldap groups,
+// then check if the user belongs to one of these groups
+// if not, the invalidate the volume for this user
+
+if ($conf['auth'] == 'ldap')
+{
+	foreach ($conf['volumes'] as $key => $value)
+		if (
+		array_key_exists ('groups', $conf['volumes'][$key])
+		&& count($conf['volumes'][$key]['groups']) > 0
+		)
+		{
+			$inter = array_uintersect ($conf['volumes'][$key]['groups'], $_SESSION['filebrowsergroups'], 'strcasecmp');
+			$conf['volumes'][$key]['valid'] = ( (count ($inter) > 0) ? 'yes' : 'no');
+		}
+		else // no group configured: no restriction based on groups
+			$conf['volumes'][$key]['valid'] = 'yes';
+}
+else // if no auth, then no groups, then no group based limitation
+	foreach ($conf['volumes'] as $key => $value)
+		$conf['volumes'][$key]['valid'] = 'yes';
 
 //==============================================================
 // ADD/REMOVE BOOKMARK
@@ -368,10 +434,10 @@ if ($action == 'export')
 		if (array_key_exists ('log', $conf)
 		&&  array_key_exists ('file', $conf['log']))
 		{
-			$log = new log($conf['log']['file']);
+			$log = new log($conf['log']['file'], format: $conf['log']['format'], tz: $conf['tz']);
 			try
 			{
-				$log -> log([ $action, $path, '', $status ]);
+				$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>'', 'status'=>$status, 'username'=> $session->getLogin() ]);
 			} catch (Exception $e) {
 			global_failure ($e -> getMessage() );
 			}
@@ -410,10 +476,10 @@ if ($action == 'download')
 			if (array_key_exists ('log', $conf)
 			&&  array_key_exists ('file', $conf['log']))
 			{
-				$log = new log($conf['log']['file']);
+				$log = new log($conf['log']['file'], format: $conf['log']['format'], tz: $conf['tz']);
 				try
 				{
-					$log -> log([ $action, $path, $file, $status ]);
+					$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$file, 'status'=>$status, 'username'=> $session->getLogin() ]);
 				} catch (Exception $e) {
 				global_failure ($e -> getMessage() );
 				}
@@ -589,6 +655,10 @@ die();
 	$root = get_volume ($path);
 }
 
+function utf8_to_iso8859_1(string $s): string {
+        return mb_convert_encoding($s, 'ISO-8859-1', 'UTF-8');
+}
+
 // set pageno from $_GET or $_POST or $_REQUEST array
 function
 set_pageno(string $origin = 'GET'): void
@@ -729,11 +799,13 @@ authenticate (): void
 		return;
 	}
 
-	$ldapconn = @ldap_connect($conf['ldap']['server'],$conf['ldap']['port']);
+	// since php8.3, server,port replaced by uri
+	//$ldapconn = @ldap_connect($conf['ldap']['server'],$conf['ldap']['port']);
+	$ldapconn = @ldap_connect($conf['ldap']['uri']);
 	if (!$ldapconn)
 	{
 		$info -> set ([
-			'msg' => 'Cannot connect to LDAP server (' . $conf['ldap']['server'] . ')',
+			'msg' => 'Cannot connect to LDAP server (' . $conf['ldap']['uri'] . ')',
 			'level' => 'danger',
 			'feather' => 'alert-triangle'
 		]);
@@ -746,18 +818,66 @@ authenticate (): void
 	$pattern = $conf['ldap']['pattern'];
 	$dn = str_replace ('{login}', $login, $pattern);
 
+	// here, no attempt to connect to ldap server has been made yet
+	// the code above has just *defined* what connection will look like
+
 	$lb = @ldap_bind($ldapconn,$dn,$password);
-
-	ldap_close($ldapconn);
-
-	if ($lb === true)	// LDAP - OK
-		$session -> setLogin ($login);
-	else
+	if ($lb === false)
+	{
 		$info -> set ([
 			'msg' => 'Invalid credential',
 			'level' => 'danger',
 			'feather' => 'slash'
 		]);
+
+		if (array_key_exists ('log', $conf)
+		&&  array_key_exists ('file', $conf['log']))
+		{
+			$log = new log($conf['log']['file'], format: $conf['log']['format'], tz: $conf['tz']);
+			try
+			{
+				$log -> log([ 'action'=>'login', 'ldap'=>$conf['ldap']['uri'], 'login'=>$login, 'status'=>'NOK', 'username' => 'nobody' ]);
+			} catch (Exception $e) {
+			global_failure ($e -> getMessage() );
+			}
+		}
+
+		return;
+	}
+
+	//
+	// Retrieve user groups (only if baseDN defined)
+	// note: case-insensitive, stored as uppercase
+	//
+	$userGroups = [];
+	if (array_key_exists ('baseDN', $conf['ldap']))
+	{
+		$base_dn = $conf['ldap']['baseDN'];
+		$filter = "(sAMAccountName=$login)";
+		$ldap_search_result = @ldap_search($ldapconn, $base_dn, $filter, array("memberOf"));
+		if ($ldap_search_result === false)
+		{
+			$info -> set ([
+				'msg' => 'Cannot query LDAP server (' . $conf['ldap']['uri'] . ')',
+				'level' => 'danger',
+				'feather' => 'alert-triangle'
+			]);
+			return;
+		}
+		$ldap_groups = ldap_get_entries($ldapconn, $ldap_search_result);
+		if ($ldap_groups['count'] > 0 && isset($ldap_groups[0]['memberof']))
+			foreach ($ldap_groups[0]['memberof'] as $key => $group)
+				if ($key != 'count')
+				{
+					if (preg_match('/CN=([^,]+)/', strtoupper($group), $matches))
+						$userGroups[] = $matches[1];
+				}
+	}
+
+	ldap_close($ldapconn);
+
+	$session -> setLogin ($login);
+	$session -> setGroups ($userGroups);
 }
 
 function
@@ -776,13 +896,16 @@ send_html_head(): void
 
     <title>File browsing '.$ver.'</title>
 
-    <!-- Bootstrap core CSS -->
-<script src="https://code.jquery.com/jquery-3.7.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
-<?php if ($use_dropdowns) { ?>
-<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-fQybjgWLrvvRgtW6bFlB7jaZrFsaBXjsOMm/tB9LTS58ONXgqbR9W8oWht/amnpF" crossorigin="anonymous"></script>
-<?php } ?>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+
+<!--
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
+-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
+<!--
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-LN+7fdVzj6u52u30Kp6M/trliBMCMKTyK833zpbD+pXdCLuTusPj697FH4R/5mcr" crossorigin="anonymous">
+-->
+
 <link rel="stylesheet" href="css/filebrowser.css">
 <link rel="stylesheet" href="css/check-box.css">
 <script src="js/filebrowser.js"></script>
@@ -873,7 +996,8 @@ get_volume (string $path): ?array
 	global $conf;
 
 	foreach ($conf['volumes'] as $volume)
-		if (starts_with ($path, $volume['path']))
+		if ($volume['valid'] == 'yes'
+		&&  starts_with ($path, $volume['path']))
 			return $volume;
 
 	return null;
@@ -1115,10 +1239,20 @@ parse_dir (): void
 		else
 		{
 			$a['name-utf8'] = $file;
-			$a['name-8859-1'] = utf8_decode ($file);
+			$a['name-8859-1'] = utf8_to_iso8859_1 ($file);
 		}
 
 		$a['type'] = @filetype ($pathname);
+		/*
+		Possible values:
+		'block': block special device
+		'char': character special device
+		'dir': directory
+		'fifo': FIFO (named pipe)
+		'file': regular file
+		'link': symbolic link
+		'unknown': unknown file type
+		*/
 		if ($fastmode)
 		{
 			// in fast mode, read only extended attributes used for filtering
@@ -1134,6 +1268,9 @@ parse_dir (): void
 
 		if ($a['type'] == 'link')
 		{
+			if ($root['showlinks'] == 'no')
+				continue;
+
 			$linktarget = readlink ($pathname);
 			if (substr($linktarget,0,1) == '/')
 				$p = new filename ($linktarget);
@@ -1389,6 +1526,28 @@ global_failure(string $msg): void
 //----------------------------------------------------------
 
 function
+add_feather(): void
+{
+echo '
+    <script src="https://unpkg.com/feather-icons/dist/feather.min.js"></script>
+    <script>
+      feather.replace()
+    </script>
+
+    <script>
+            $(document).ready(function(){
+		// Add the following code if you want the name of the file appear on select
+		$(".custom-file-input").on("change", function() {
+		  var fileName = $(this).val().split("\\\\").pop();
+		  $(this).siblings(".custom-file-label").addClass("selected").html(fileName);
+		});
+		hideGroupActions();
+            });
+    </script>
+';
+}
+
+function
 show_login_form(): void
 {
 	global $ver;
@@ -1410,7 +1569,7 @@ show_login_form(): void
       <label for="inputPassword" class="sr-only">Password</label>
       <input type="password" id="inputPassword" class="form-control" placeholder="Password" required="" name="password">
       <button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
-      <p class="mt-5 mb-3 text-muted">V '.$ver.' (c) 2020</p>';
+      <p class="mt-5 mb-3 text-muted">V '.$ver.' (c) 2020-2025</p>';
 
 /*
 	global $path;
@@ -1944,7 +2103,6 @@ display_checkboxes_and_pagination(): void
 	}
 ?>
     <div class="col-md-auto" id="multi">
-MULTI
     </div>
 
     <div class="col-sm">
@@ -1991,6 +2149,8 @@ foreach ($columns as $column)
 	$add = '';
 	if ($column == 'actions')
 		$add = 'width=100';
+	if ($column == 'mtime' || $column == 'Perms')
+		$add = 'width=10%';
 	echo '<th ' . $add . '>';
 
 	$sortname = '';
@@ -2102,10 +2262,10 @@ else
 if (array_key_exists ('log', $conf)
 &&  array_key_exists ('file', $conf['log']))
 {
-	$log = new log($conf['log']['file']);
+	$log = new log($conf['log']['file'], format: $conf['log']['format'], tz: $conf['tz']);
 	try
 	{
-		$log -> log([ $action, $path, $file, $status ]);
+		$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$file, 'status'=>$status, 'username'=> $session->getLogin() ]);
 	} catch (Exception $e) {
 		global_failure ($e -> getMessage() );
 	}
@@ -2152,6 +2312,9 @@ send_html_head();
 <?php
 	foreach ($conf['volumes'] as $volume)
 	{
+		if ($volume['valid'] != 'yes')
+			continue;
+
 		if (is_dir($volume['path']))
 		{
 			$href = make_link ([
@@ -2241,24 +2404,7 @@ if ($conf['auth'] == 'ldap') {
     <!-- Placed at the end of the document so the pages load faster -->
 
     <!-- Icons -->
-    <script src="https://unpkg.com/feather-icons/dist/feather.min.js"></script>
-    <script>
-      feather.replace()
-    </script>
-
-    <script>
-            $(document).ready(function(){
-		// Add the following code if you want the name of the file appear on select
-		$(".custom-file-input").on("change", function() {
-		  var fileName = $(this).val().split("\\").pop();
-		  $(this).siblings(".custom-file-label").addClass("selected").html(fileName);
-		});
-<?php if ($use_dropdowns) { ?>
-$('.dropdown-toggle').dropdown();
-<?php } ?>
-		hideGroupActions();
-            });
-    </script>
+<?php add_feather(); ?>
 
   </body>
 </html>

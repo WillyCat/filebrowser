@@ -2,16 +2,20 @@
 
 class log
 {
-	private $fn_pattern;
-	var $pathname;
+	private string $fn_pattern;
+	private string $pathname;
 	private $fp;
+	private string $format; // 'text', 'json'
+	private string $tz;
 
 	public function
-	__construct(string $fn_pattern)
+	__construct(string $fn_pattern, string $format = 'json', string $tz = 'Europe/Paris')
 	{
 		$this -> fn_pattern = $fn_pattern;
 		$this -> fp = null;
 		$this -> pathname = '';
+		$this -> format = $format;
+		$this -> tz = $tz;
 	}
 
 	private function
@@ -39,7 +43,7 @@ class log
 	openFile (): void
 	{
 		$this -> getFilename();
-		$this -> fp = fopen ($this -> pathname, 'a+');
+		$this -> fp = @fopen ($this -> pathname, 'a+');
 		if (!$this -> fp)
 			throw new Exception ('Cannot open log file '.$this -> pathname);
 	}
@@ -67,7 +71,7 @@ class log
 	}
 
 	private function
-	buildLine ($parms): array
+	buildLine (array|string $parms): array
 	{
 		$a = $this -> buildHeader();
 		if (is_array ($parms))
@@ -78,27 +82,31 @@ class log
 	}
 
 	private function
-	formatLine ($parms): string
+	formatLine (array|string $parms): string
 	{
+		$str = '';
 		$a = $this -> buildLine ($parms);
 		$str = implode (':', $a);
 		return $str;
 	}
 
 	public function
-	log ($parms)
+	log (array|string $parms)
 	{
-		$str = $this -> formatLine ($parms);
+		switch ($this -> format)
+		{
+		case 'text' :
+			$str = $this -> formatLine ($parms);
+			break;
+		case 'json' :
+			$parms['date'] = date_format(date_create()->setTimezone(new DateTimeZone($this->tz)), 'c');
+			$str = json_encode ($parms, JSON_UNESCAPED_SLASHES);
+			break;
+		}
 		$this -> openFile();
 		$l = fwrite ($this -> fp, $str . "\n");
 		if ($l === false)
 			throw new Exception ('Cannot write to log file');
-//die (realpath('/tmp'));
-//$dh = opendir ('/tmp');
-//while (($file = readdir ($dh)) !== false)
-//echo $file . '<br>';
-//closedir ($dh);
-//die ('data written to '.$this->pathname.': '.$l.' bytes');
 		$this -> closeFile();
 	}
 }

@@ -28,7 +28,7 @@ Date        Version  Changement
                      Refactoring / Commentaires
                      Possibilite de trier sur les colonnes
                      Amelioration du pied de page
-2020-07-28      0.7  Bugfix: authentification was broken
+2020-07-28      0.7  Bugfix: authentication was broken
 2020-07-28      0.8  Bugfix: missing external css: no more external refs
                      all is included in a single php file plus CDNs
 2020-07-28      0.9  Increase security with improved parms processing
@@ -97,3 +97,18 @@ Date        Version  Changement
 2024-04-25     1.37  jquery 3.6.0 > 3.7.1
                      popper.js deprecated, should use floating-ui instead (required code update)
                      bootstrap 4.6.1 should be 5.3.5
+2025-08-08     1.38  php 8.3 > 8.4
+                     fixed error due to utf8_decode() deprecation
+                     added new attributes for volumes: showlinks, groups
+                     extended log file to add user name
+2025-08-08     1.39  intermediate version, not published
+2025-08-08     1.40  intermediate version, not published
+2025-08-08     1.41  removed popper.js
+                     bootstrap 4.6.1 > 4.6.2 (bootstrap EOL 2023-01-01)
+                     log file logs more events, format is now json by default
+                     log file: user name is 'anonymous' when no ldap used, 'nobody' for actions started by unlogged user (should be login attempts only)
+                     [Breaking] conf file ldap.server and ldap.port no longer supported
+                                replaced by ldap.uri
+                                ldap.uri => ldap[s]://<server>[:port]
+                     Added health check (/?action=health): returns healthy
+                     Added ping (/?action=ping): returns pong

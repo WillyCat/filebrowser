@@ -14,8 +14,7 @@
 	},
         "auth": "ldap",
         "ldap": {
-                "server": "your.ldap.server",
-                "port": 389,
+                "uri": "ldap://your.ldap.server:389",
                 "pattern": "cn={login},ou=DAP,ou=DOP,dc=xxxx,dc=xxxx",
                 "protocol_version": 3
         },
@@ -27,6 +26,10 @@
                 "enabled": "yes",
                 "columns": [ "Filename", "Size", "mtime", "ctime", "type" ]
         },
+        "log": {
+                "file": "/audit/audit.log",
+		"format": "json"
+        },
         "volumes": [
                 {
                 "name": "/tmp",
@@ -34,7 +37,8 @@
                 "download": "yes",
                 "delete": "yes",
                 "upload": "yes",
-                "showhiddenfiles": "yes"
+                "showhiddenfiles": "yes",
+		"groups": [ "group1", "group2" ]
                 },
                 {
                 "name": "Home",

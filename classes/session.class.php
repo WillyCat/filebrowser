@@ -27,6 +27,12 @@ class session
 	}
 
 	public function
+	setGroups (array $userGroups): void
+	{
+		$_SESSION['filebrowsergroups'] = $userGroups;
+	}
+
+	public function
 	getLogin(): string
 	{
 		if (!array_key_exists ('filebrowseruser', $_SESSION))
