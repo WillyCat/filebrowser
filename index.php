@@ -418,8 +418,12 @@ if ($action == 'delete')
 		}
 		else
 		{
+			$msg = 'Deletion failed';
+			$last_error = error_get_last();
+			if (array_key_exists ('message', $last_error) && $last_error['message'] != '')
+				$msg .= ' - ' . $last_error['message'];
 			$info -> set ([
-				'msg' => 'Deletion failed',
+				'msg' => $msg,
 				'level' => 'danger',
 				'feather' => 'alert-triangle'
 			]);
