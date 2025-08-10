@@ -112,3 +112,4 @@ Date        Version  Changement
                                 ldap.uri => ldap[s]://<server>[:port]
                      Added health check (/?action=health): returns healthy
                      Added ping (/?action=ping): returns pong
+2025-08-10     1.42  fixed error due to utf8_encode() deprecation

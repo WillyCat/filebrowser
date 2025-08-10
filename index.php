@@ -35,6 +35,18 @@ $microstart = microtime(true);
 
 $pageno = 0 ; // current page, first is 0
 
+function
+iso8859_1_to_utf8(string $s): string
+{
+	return mb_convert_encoding($s, 'ISO-8859-1', 'UTF-8');
+}
+
+function
+utf8_to_iso8859_1 (string $s): string
+{
+	return mb_convert_encoding($s, 'UTF-8', 'ISO-8859-1');
+}
+
 $ver = '';
 if (file_exists ('version'))
 {
@@ -357,8 +369,13 @@ if ($action == 'confirm-delete')
 		$buttons[] = '<a class="btn btn-primary" href="'.$yes_link.'" role="button">Yes</a>';
 		$buttons[] = '<a class="btn btn-primary" href="'.$no_link.'" role="button">No</a>';
 
+		if ($root['encoding'] == 'iso-8859-1')
+			$file_utf8 = iso8859_1_to_utf8($file);
+		else
+			$file_utf8 = $file;
+
 		$info -> set ([
-			'msg' => 'Delete ' . $file . ' ?', // TODO: utf8_encode
+			'msg' => 'Delete file [' . $file_utf8 . '] ?',
 			'feather' => 'help-circle',
 			'level' => 'warning',
 			'buttons' => $buttons
@@ -387,8 +404,13 @@ if ($action == 'delete')
 	{
 		if (@unlink($pathname))
 		{
+			if ($root['encoding'] == 'iso-8859-1')
+				$file_utf8 = iso8859_1_to_utf8($file);
+			else
+				$file_utf8 = $file;
+
 			$info -> set ([
-				'msg' => 'File ' .$file. ' deleted', // TODO: utf8_encode
+				'msg' => 'File [' .$file_utf8. '] deleted',
 				'level' =>  'success',
 				'feather' => 'check-circle'
 			]);
@@ -653,10 +675,6 @@ die();
 */
 	global $root;
 	$root = get_volume ($path);
-}
-
-function utf8_to_iso8859_1(string $s): string {
-        return mb_convert_encoding($s, 'ISO-8859-1', 'UTF-8');
 }
 
 // set pageno from $_GET or $_POST or $_REQUEST array
@@ -1234,7 +1252,7 @@ parse_dir (): void
 		if ($root['encoding'] == 'iso-8859-1')
 		{
 			$a['name-8859-1'] = $file;
-			$a['name-utf8'] = utf8_encode($file);
+			$a['name-utf8'] = iso8859_1_to_utf8($file);
 		}
 		else
 		{
@@ -1788,7 +1806,7 @@ make_link (array $parms, string $format='get', array $exclude = []): string
 		$urlparts = [ ];
 		foreach ($parms as $key => $value)
 			if (!in_array ($key, $exclude))
-				$urlparts[] = '<input type="hidden" name="' . $key . '" value="' . htmlspecialchars ($parms[$key]) . '">'; // TODO : pas rawurlencode
+				$urlparts[] = '<input type="hidden" name="' . $key . '" value="' . htmlspecialchars ($parms[$key]) . '">'; // NB : do not use rawurlencode()
 		// paste parts together
 		$link = implode ("\n", $urlparts);
 		break;
@@ -2065,7 +2083,7 @@ show_breadcrumb(): void
 		else
 		{
 			if ($root['encoding'] == 'iso-8859-1')
-				$dirlevel_utf8 = utf8_encode($dirlevel);
+				$dirlevel_utf8 = iso8859_1_to_utf8($dirlevel);
 			else
 				$dirlevel_utf8 = $dirlevel;
 
