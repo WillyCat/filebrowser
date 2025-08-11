@@ -4,7 +4,7 @@ title/image: image displayed at upper left, none if empty or missing
 title/url: meaningful only if text or image filled - link
 bookmarks/enabled: "yes" to enable bookmarks, "no" or missing to disable
 bookmarks/max: maximum number of bookmarks
-log/file: all actions are logged in this file - no logging if empty or missing - filename can contain %Y,%m,%d,%H,%i,%s
+log/file: all actions are logged in this file - no logging if empty or missing - filename can contain %Y,%m,%d,%H,%i,%s - can also be "php://stdout"
 log/format: "text" or "json" (default)
 auth: auth mechanism - possible values: "none", "ldap"
 ldap: this section considered if auth set to ldap
@@ -26,3 +26,5 @@ volumes[i]/showlinks: if set to "no", hide links, links are visible if set to ye
 volumes[i]/encoding: charset of the volume, as seen by filebrowser (depends on native encoding and mount options) - possible values: "iso-8859-1", "utf-8"
 volumes[i]/groups: array of groups - only if auth set to ldap - restrict this volume to users belonging to one the listed groups
 default: unused
+debug: for troubleshooting
+debug/enabled: if set to "yes", display "Debug" link to provide internal infos

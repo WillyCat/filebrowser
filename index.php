@@ -1,5 +1,5 @@
 <?php
-// v1.41
+// v1.46
 require_once 'classes/filename.class.php';
 require_once 'classes/message.class.php';
 require_once 'classes/session.class.php';
@@ -179,7 +179,10 @@ if ($session -> is_valid() && $session -> getLogin() == 'anonymous' && $conf['au
 if (!$session -> is_valid())
 {
 	if ($conf['auth'] == 'none') // auto-login
+	{
 		$session -> setLogin ('anonymous');
+		$session -> setGroups ([ ]);
+	}
 	else // real login
 	{
 		// without a valid session, only two actions can be performed:
@@ -215,14 +218,14 @@ if ($conf['auth'] == 'ldap')
 		)
 		{
 			$inter = array_uintersect ($conf['volumes'][$key]['groups'], $_SESSION['filebrowsergroups'], 'strcasecmp');
-			$conf['volumes'][$key]['valid'] = ( (count ($inter) > 0) ? 'yes' : 'no');
+			$conf['volumes'][$key]['allowed'] = ( (count ($inter) > 0) ? 'yes' : 'no');
 		}
 		else // no group configured: no restriction based on groups
-			$conf['volumes'][$key]['valid'] = 'yes';
+			$conf['volumes'][$key]['allowed'] = 'yes';
 }
 else // if no auth, then no groups, then no group based limitation
 	foreach ($conf['volumes'] as $key => $value)
-		$conf['volumes'][$key]['valid'] = 'yes';
+		$conf['volumes'][$key]['allowed'] = 'yes';
 
 //==============================================================
 // ADD/REMOVE BOOKMARK
@@ -302,6 +305,48 @@ if ($action == 'debug')
 			'feather' => 'slash'
 		]);
 		$status = 'NOK';
+	}
+}
+
+function
+display_debug(): void
+{
+	global $conf;
+
+	echo '<h2>Session</h2>';
+	echo '<PRE>';
+	print_r ($_SESSION);
+	echo '</PRE>';
+
+	echo '<h2>Conf</h2>';
+	echo '<PRE>';
+	print_r ($conf);
+	echo '</PRE>';
+
+	echo '<h2>Groups</h2>';
+	echo '<PRE>';
+	print_r ($_SESSION['filebrowsergroups']);
+	echo '</PRE>';
+
+	if ($conf['auth'] == 'ldap')
+	{
+		echo '<h2>LDAP</h2>';
+		foreach ($conf['volumes'] as $key => $value)
+		{
+			echo '<h3>Volume ['.$key.']</h3>';
+			echo '<PRE>';
+			if (
+			array_key_exists ('groups', $conf['volumes'][$key])
+			&& count($conf['volumes'][$key]['groups']) > 0
+			)
+			{
+				$inter = array_uintersect ($conf['volumes'][$key]['groups'], $_SESSION['filebrowsergroups'], 'strcasecmp');
+				echo 'intersect size: ' . count($inter);
+			}
+			else // no group configured: no restriction based on groups
+				echo 'No group defined: allowed for everybody';
+			echo '</PRE>';
+		}
 	}
 }
 
@@ -913,7 +958,7 @@ authenticate (): void
 			foreach ($ldap_groups[0]['memberof'] as $key => $group)
 				if ($key != 'count')
 				{
-					if (preg_match('/CN=([^,]+)/', strtoupper($group), $matches))
+					if (preg_match('/CN=([^,]+)/', $group, $matches))
 						$userGroups[] = $matches[1];
 				}
 	}
@@ -1040,7 +1085,7 @@ get_volume (string $path): ?array
 	global $conf;
 
 	foreach ($conf['volumes'] as $volume)
-		if ($volume['valid'] == 'yes'
+		if ($volume['allowed'] == 'yes'
 		&&  starts_with ($path, $volume['path']))
 			return $volume;
 
@@ -2356,7 +2401,7 @@ send_html_head();
 <?php
 	foreach ($conf['volumes'] as $volume)
 	{
-		if ($volume['valid'] != 'yes')
+		if ($volume['allowed'] != 'yes')
 			continue;
 
 		if (is_dir($volume['path']))
@@ -2439,6 +2484,9 @@ if ($conf['auth'] == 'ldap') {
 ?>
 	<div>
 <?php
+	if ($action == 'debug' &&  $conf['debug']['enabled'] == 'yes')
+		display_debug();
+	else
 	if ($error -> getMsg() != '')
 		$error -> display();
 	else
