@@ -99,6 +99,10 @@ class log
 			$str = $this -> formatLine ($parms);
 			break;
 		case 'json' :
+			foreach ([ 'REMOTE_ADDR', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'HTTP_CF_CONNECTING_IP' ] as $key)
+				if (array_key_exists ($key, $_SERVER))
+					$parms['ip'] = $_SERVER[$key];
+			$parms['session'] = session_id();
 			$parms['date'] = date_format(date_create()->setTimezone(new DateTimeZone($this->tz)), 'c');
 			$str = json_encode ($parms, JSON_UNESCAPED_SLASHES);
 			break;

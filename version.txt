@@ -113,3 +113,4 @@ Date        Version  Changement
                      Added health check (/?action=health): returns healthy
                      Added ping (/?action=ping): returns pong
 2025-08-10     1.42  fixed error due to utf8_encode() deprecation
+2025-08-11     1.43  Added ip in audit log
