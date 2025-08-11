@@ -171,3 +171,10 @@ body {
 	top: 2px;
 	padding: 15px;
 }
+
+.terminal {
+	padding: 5px;
+	background: black;
+	color: green;
+	font-family: monospace;
+}

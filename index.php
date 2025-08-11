@@ -5,7 +5,7 @@ require_once 'classes/message.class.php';
 require_once 'classes/session.class.php';
 require_once 'classes/log.class.php';
 // GET:
-// action (bookmark, logout, health, ping)
+// action (bookmark, logout, health, ping, debug)
 // dir [, page]
 // dir, action (export)
 // dir, file, action (download, delete, upload-form)
@@ -103,6 +103,9 @@ if (array_key_exists ('fastmode', $conf)
 // if no specific format in conf file, default is json
 if (array_key_exists('log', $conf) && !array_key_exists('format', $conf))
 	$conf['log']['format'] = 'json';
+
+if (!array_key_exists ('debug', $conf))
+	$conf['debug'] = [ 'enabled' => 'no' ];
 
 // Setting defaults and converting encodings to lower case
 foreach ($conf['volumes'] as $key => $value)
@@ -280,6 +283,25 @@ if ($conf['bookmarks']['enabled'] == 'yes')
 			$bookmarks_cookie_value = serialize($bookmarks);
 			setcookie ($bookmarks_cookie_name, $bookmarks_cookie_value);
 		}
+	}
+}
+
+//==============================================================
+// DEBUG
+//==============================================================
+if ($action == 'debug')
+{
+	if ($conf['debug']['enabled'] == 'yes')
+	{
+	}
+	else
+	{
+		$error -> set ([
+			'msg' => 'You are not allowed to perform this action',
+			'level' =>  'danger',
+			'feather' => 'slash'
+		]);
+		$status = 'NOK';
 	}
 }
 
@@ -2376,6 +2398,20 @@ send_html_head();
 		      </li>
 <?php
 		} // foreach
+?>
+
+<?php
+if ($conf['debug']['enabled'] == 'yes')
+{
+?>
+              <li class="nav-item ">
+                <a class="nav-link" href="?action=debug" title="Debug">
+                  <span data-feather="info"></span>
+                  Debug
+                </a>
+              </li>
+<?php
+		} // debug
 ?>
 
 <?php

@@ -16,6 +16,7 @@
         "ldap": {
                 "uri": "ldap://your.ldap.server:389",
                 "pattern": "cn={login},ou=DAP,ou=DOP,dc=xxxx,dc=xxxx",
+		"baseDN": "DC=xxx,DC=yyy",
                 "protocol_version": 3
         },
         "display": {
