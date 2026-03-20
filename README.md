@@ -24,7 +24,7 @@ Features :
 
 Built on :
 * apache (https://httpd.apache.org/)
-* PHP 8.4 (https://www.php.net/) with ldap functions (https://www.php.net/manual/en/book.ldap.php)
+* PHP 8.5 (https://www.php.net/) with ldap functions (https://www.php.net/manual/en/book.ldap.php)
 * bootstrap 4.6.2 (https://getbootstrap.com/)
 * jquery 3.7.1 (https://jquery.com/)
 * Feather icons (https://feathericons.com/)
