@@ -1,5 +1,5 @@
 <?php
-// v1.46
+// v1.49
 require_once 'classes/filename.class.php';
 require_once 'classes/message.class.php';
 require_once 'classes/session.class.php';
@@ -77,16 +77,12 @@ set_orderby();
 //----------------------------------
 // Read configuration file
 //----------------------------------
-$conf_content = @file_get_contents ('/etc/filebrowser/conf.json');
-if ($conf_content === false)
-	global_failure ('Cannot read configuration file');
-
-try
-{
-	$conf = json_decode ($conf_content, true, 512, JSON_THROW_ON_ERROR );
-} catch (Exception $e) {
-	global_failure ('Cannot decode conf file');
-}
+$conf_files = [ ];
+$conf = [ ];
+read_conf_file ('/etc/filebrowser/conf.json', true);
+if (array_key_exists ('includes', $conf))
+	foreach ($conf['includes'] as $include_pattern)
+		read_conf_pattern ($include_pattern);
 $conf['actions'] = [ 'download', 'delete' ]; // possible actions on a file
 
 if (!array_key_exists ('volumes', $conf))
@@ -94,11 +90,6 @@ if (!array_key_exists ('volumes', $conf))
 
 if (count ($conf['volumes']) == 0)
 	global_failure ('no volume configured');
-
-// overwrite default with configured value, if set
-if (array_key_exists ('fastmode', $conf)
-&&  array_key_exists ('threshold', $conf['fastmode']))
-	$fastmode_threshold = $conf['fastmode']['threshold'];
 
 // if no specific format in conf file, default is json
 if (array_key_exists('log', $conf) && !array_key_exists('format', $conf))
@@ -129,8 +120,68 @@ foreach ($conf['volumes'] as $key => $value)
 if (!array_key_exists ('tz', $conf))
 	$conf['tz'] = 'Europe/Paris';
 
+function
+read_conf_pattern (string $pattern): void
+{
+	$files = glob ($pattern);
+	if ($files === false)
+		return;
+
+	foreach ($files as $file)
+		read_conf_file ($file, false);
+}
+
+function
+read_conf_file (string $fn, bool $dieIfMissing = false): void
+{
+	global $conf, $conf_files;
+
+	$conf_files[] = $fn;
+
+	// empty string is not a valid json, but we do not want to fail for empty conf files
+	if (filesize ($fn) == 0)
+		return;
+
+	$conf_content = @file_get_contents ($fn);
+	if ($conf_content === false)
+		if ($dieIfMissing)
+			global_failure ('Cannot read configuration file');
+		else
+			return;
+
+	// file with only tabs, spaces, CR is considered as empty
+	$str = str_replace([ "\n", "\r", "\t", ' ' ], '', $conf_content);
+	if (strlen ($str) == 0)
+		return;
+
+	try
+	{
+		$localconf = json_decode ($conf_content, true, 512, JSON_THROW_ON_ERROR );
+	} catch (Exception $e) {
+		global_failure ('Cannot decode conf file ' . $fn);
+	}
+
+	$entries_to_merge = [ 'volumes' ];
+	// entries to merge
+	foreach ($entries_to_merge as $entry)
+		if (array_key_exists ($entry, $localconf))
+			if (array_key_exists ($entry, $conf))
+				$conf[$entry] = array_merge ($conf[$entry], $localconf[$entry]);
+			else
+				$conf[$entry] = $localconf[$entry];
+
+	// entries to replace
+	foreach ($localconf as $entry=>$value)
+		if (!in_array($entry, $entries_to_merge))
+			$conf[$entry] = $value;
+}
+
 date_default_timezone_set($conf['tz']);
 
+// overwrite default with configured value, if set
+if (array_key_exists ('fastmode', $conf)
+&&  array_key_exists ('threshold', $conf['fastmode']))
+	$fastmode_threshold = $conf['fastmode']['threshold'];
 //----------------------------------
 // Health
 //----------------------------------
@@ -311,7 +362,7 @@ if ($action == 'debug')
 function
 display_debug(): void
 {
-	global $conf;
+	global $conf, $conf_files;
 
 	echo '<h2>Session</h2>';
 	echo '<PRE>';
@@ -323,7 +374,13 @@ display_debug(): void
 	print_r ($conf);
 	echo '</PRE>';
 
-	echo '<h2>Groups</h2>';
+	echo '<h2>Conf files</h2>';
+	echo '<PRE>';
+	foreach ($conf_files as $f)
+		echo $f . "\n";
+	echo '</PRE>';
+
+	echo '<h2>User groups</h2>';
 	echo '<PRE>';
 	print_r ($_SESSION['filebrowsergroups']);
 	echo '</PRE>';
@@ -340,6 +397,10 @@ display_debug(): void
 			&& count($conf['volumes'][$key]['groups']) > 0
 			)
 			{
+				echo "Groups allowed: ";
+				foreach ($conf['volumes'][$key]['groups'] as $g)
+					echo $g . " ";
+				echo "\n";
 				$inter = array_uintersect ($conf['volumes'][$key]['groups'], $_SESSION['filebrowsergroups'], 'strcasecmp');
 				echo 'intersect size: ' . count($inter);
 			}

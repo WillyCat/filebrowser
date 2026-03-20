@@ -13,7 +13,7 @@ ldap/pattern: ldap query, metas are {login}
 ldap/protocol_version: 2 or 3
 display/columns: colums to display - array of names - possible values are : checkbox, Filename, Size, Perms, mtime, type, actions
 display/pagesize: lignes per page
-csv/enabled: if set to "yes", enable dir content download as CSV file, disabled of "no" or empty or missing
+csv/enabled: if set to "yes", enable dir content download as CSV file, disabled if "no" or empty or missing
 csv/columns: colums to export - possible values are the same as display columns except checkbox and actions (meaning less here)
 volumes: array - items to select in left menu
 volumes[i]/name: label to display in menu
@@ -28,3 +28,5 @@ volumes[i]/groups: array of groups - only if auth set to ldap - restrict this vo
 default: unused
 debug: for troubleshooting
 debug/enabled: if set to "yes", display "Debug" link to provide internal infos
+includes[]: list of conf files to include, can include patterns - included files can contain any entry - if duplicate entries are found among conf files, the last entry overwrites previous ones (so order of includes matters), except for volumes where entries are merged
+fastmode/threshold: number of entries in directory to enter fastmode - in fastmode, less info is delivered, reducing time to process entries (decreases user wait and can avoid timeouts) - default: 5000
