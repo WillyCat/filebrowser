@@ -59,6 +59,6 @@
                 "encoding": "iso-8859-1"
                 }
         ],
-	"includes: [ ],
+	"includes": [ ],
         "default": "/tmp"
 }
