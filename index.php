@@ -1,5 +1,5 @@
 <?php
-// v1.49
+// v1.50
 require_once 'classes/filename.class.php';
 require_once 'classes/message.class.php';
 require_once 'classes/session.class.php';
@@ -362,7 +362,12 @@ if ($action == 'debug')
 function
 display_debug(): void
 {
-	global $conf, $conf_files;
+	global $conf, $conf_files, $ver;
+
+	echo '<h2>Version</h2>';
+	echo '<PRE>';
+	echo $ver;
+	echo '</PRE>';
 
 	echo '<h2>Session</h2>';
 	echo '<PRE>';
@@ -955,21 +960,82 @@ authenticate (): void
 	if (!$ldapconn)
 	{
 		$info -> set ([
-			'msg' => 'Cannot connect to LDAP server (' . $conf['ldap']['uri'] . ')',
+			'msg' => 'Cannot connect to LDAP server',
 			'level' => 'danger',
 			'feather' => 'alert-triangle'
 		]);
+		if (array_key_exists ('log', $conf)
+		&&  array_key_exists ('file', $conf['log']))
+		{
+			$log = new log($conf['log']['file'], format: $conf['log']['format'], tz: $conf['tz']);
+			try
+			{
+				$log -> log([ 'action'=>'ldap_connect', 'ldap'=>$conf['ldap']['uri'], 'login'=>$login, 'status'=>'NOK', 'username' => 'nobody', 'message' => ldap_error($ldapconn) ]);
+			} catch (Exception $e) {
+				global_failure ($e -> getMessage() );
+			}
+		}
 		return;
 	}
 
 	ldap_set_option($ldapconn, LDAP_OPT_PROTOCOL_VERSION,$conf['ldap']['protocol_version']);
 	ldap_set_option($ldapconn, LDAP_OPT_REFERRALS,0);
 
+	if (array_key_exists ('options', $conf['ldap']))
+		foreach ($conf['ldap']['options'] as $ldap_option)
+			if (!@ldap_set_option($ldapconn, constant($ldap_option['name']), $ldap_option['value']))
+			{
+				$info -> set ([
+					'msg' => 'Cannot set '.$ldap_option['name'].' option',
+					'level' => 'danger',
+					'feather' => 'alert-triangle'
+				]);
+
+				if (array_key_exists ('log', $conf)
+				&&  array_key_exists ('file', $conf['log']))
+				{
+					$log = new log($conf['log']['file'], format: $conf['log']['format'], tz: $conf['tz']);
+					try
+					{
+						$log -> log([ 'action'=>'option', 'ldap'=>$conf['ldap']['uri'], 'login'=>$login, 'status'=>'NOK', 'username' => 'nobody', 'message' => ldap_error($ldapconn), 'key'=>$ldap_option['name'], 'value' => $ldap_option['value'] ]);
+					} catch (Exception $e) {
+						global_failure ($e -> getMessage() );
+					}
+				}
+				return;
+			}
 	$pattern = $conf['ldap']['pattern'];
 	$dn = str_replace ('{login}', $login, $pattern);
 
 	// here, no attempt to connect to ldap server has been made yet
 	// the code above has just *defined* what connection will look like
+
+	if (array_key_exists ('debug_level', $conf['ldap']))
+		ldap_set_option(null, LDAP_OPT_DEBUG_LEVEL, $conf['ldap']['debug_level']);
+
+	if (array_key_exists ('start_tls', $conf['ldap'])
+	&& $conf['ldap']['start_tls'] == 'yes')
+		if (!@ldap_start_tls ($ldapconn))
+		{
+			$info -> set ([
+				'msg' => 'Cannot start TLS',
+				'level' => 'danger',
+				'feather' => 'alert-triangle'
+			]);
+
+			if (array_key_exists ('log', $conf)
+			&&  array_key_exists ('file', $conf['log']))
+			{
+				$log = new log($conf['log']['file'], format: $conf['log']['format'], tz: $conf['tz']);
+				try
+				{
+					$log -> log([ 'action'=>'start_tls', 'ldap'=>$conf['ldap']['uri'], 'login'=>$login, 'status'=>'NOK', 'username' => 'nobody', 'message' => ldap_error($ldapconn) ]);
+				} catch (Exception $e) {
+					global_failure ($e -> getMessage() );
+				}
+			}
+			return;
+		}
 
 	$lb = @ldap_bind($ldapconn,$dn,$password);
 	if ($lb === false)
@@ -986,9 +1052,9 @@ authenticate (): void
 			$log = new log($conf['log']['file'], format: $conf['log']['format'], tz: $conf['tz']);
 			try
 			{
-				$log -> log([ 'action'=>'login', 'ldap'=>$conf['ldap']['uri'], 'login'=>$login, 'status'=>'NOK', 'username' => 'nobody' ]);
+				$log -> log([ 'action'=>'login', 'ldap'=>$conf['ldap']['uri'], 'login'=>$login, 'status'=>'NOK', 'username' => 'nobody', 'message' => ldap_error($ldapconn) ]);
 			} catch (Exception $e) {
-			global_failure ($e -> getMessage() );
+				global_failure ($e -> getMessage() );
 			}
 		}
 

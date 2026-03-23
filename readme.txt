@@ -10,9 +10,14 @@ auth: auth mechanism - possible values: "none", "ldap"
 ldap: this section considered if auth set to ldap
 ldap/uri: ldap server uri - syntax is ldap[s]://<server>[:port]
 ldap/pattern: ldap query, metas are {login}
-ldap/protocol_version: 2 or 3
+ldap/protocol_version: 2 or 3 (default)
+ldap/baseDN: where to search
+ldap/options[].name: name of the option (see https://www.php.net/manual/en/function.ldap-set-option.php)
+ldap/options[].name: value of the option
+ldap/debug_level: 0-7
+ldap/start_tls: "yes" if TLS has to be manually started (usually used when switching to TLS on port 389), or "no" (default)
 display/columns: colums to display - array of names - possible values are : checkbox, Filename, Size, Perms, mtime, type, actions
-display/pagesize: lignes per page
+display/pagesize: lines per page
 csv/enabled: if set to "yes", enable dir content download as CSV file, disabled if "no" or empty or missing
 csv/columns: colums to export - possible values are the same as display columns except checkbox and actions (meaning less here)
 volumes: array - items to select in left menu

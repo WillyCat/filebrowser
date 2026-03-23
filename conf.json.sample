@@ -16,7 +16,14 @@
         "ldap": {
                 "uri": "ldap://your.ldap.server:389",
                 "pattern": "cn={login},ou=DAP,ou=DOP,dc=xxxx,dc=xxxx",
-                "protocol_version": 3
+                "protocol_version": 3,
+		"options": [
+			{ "name": "LDAP_OPT_X_TLS_CACERTDIR", "value": "/mycerts" },
+			{ "name": "LDAP_OPT_X_TLS_CACERTFILE", "value": "/mycerts/myca.pem" },
+			{ "name": "LDAP_OPT_X_TLS_CERTFILE", "value": "/mycerts/mycert.crt" }
+		],
+		"start_tls": "no",
+		"debug_level": 7
         },
         "display": {
                 "columns": [ "Filename", "Size", "Perms", "mtime",  "type", "actions" ],
