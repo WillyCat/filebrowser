@@ -1,5 +1,6 @@
 <?php
-// v1.50
+declare(strict_types=0);
+// v1.52
 require_once 'classes/filename.class.php';
 require_once 'classes/message.class.php';
 require_once 'classes/session.class.php';
@@ -98,6 +99,17 @@ if (array_key_exists('log', $conf) && !array_key_exists('format', $conf))
 if (!array_key_exists ('debug', $conf))
 	$conf['debug'] = [ 'enabled' => 'no' ];
 
+// Volume groups
+if (!array_key_exists ('volumegroups', $conf))
+	$conf['volumegroups'] = [ ];
+// Create a _default volume group (if not already existing)
+$found = false;
+for ($i = 0; $i < count($conf['volumegroups']); $i++)
+	if ($conf['volumegroups'][$i]['name'] == '_default')
+		$found = true;
+if (!$found)
+	$conf['volumegroups'][] = [ 'name' => '_default', 'label' => 'DEFAULT' ];
+
 // Setting defaults and converting encodings to lower case
 foreach ($conf['volumes'] as $key => $value)
 {
@@ -115,7 +127,14 @@ foreach ($conf['volumes'] as $key => $value)
 		$conf['volumes'][$key]['showhiddenfiles'] = 'no';
 	if (!array_key_exists ('showlinks', $conf['volumes'][$key]))
 		$conf['volumes'][$key]['showlinks'] = 'yes';
+	if (!array_key_exists ('volumegroup', $conf['volumes'][$key])) // if no volumegroup, attach to _default
+		$conf['volumes'][$key]['volumegroup'] = '_default';
 }
+
+// Sort volumes by volumegroup
+usort ($conf['volumes'], function (array $a, array $b) {
+	return strcmp ($a['volumegroup'], $b['volumegroup']);
+});
 
 if (!array_key_exists ('tz', $conf))
 	$conf['tz'] = 'Europe/Paris';
@@ -161,7 +180,7 @@ read_conf_file (string $fn, bool $dieIfMissing = false): void
 		global_failure ('Cannot decode conf file ' . $fn);
 	}
 
-	$entries_to_merge = [ 'volumes' ];
+	$entries_to_merge = [ 'volumes', 'volumegroups' ];
 	// entries to merge
 	foreach ($entries_to_merge as $entry)
 		if (array_key_exists ($entry, $localconf))
@@ -284,11 +303,15 @@ else // if no auth, then no groups, then no group based limitation
 
 if ($conf['bookmarks']['enabled'] == 'yes')
 {
+	$bookmarks = [ ];
+
 	$bookmarks_cookie_name = 'bookmarks';
 	if (array_key_exists ($bookmarks_cookie_name, $_COOKIE))
-		$bookmarks = unserialize ($_COOKIE[$bookmarks_cookie_name]);
-	else
-		$bookmarks = [ ];
+	{
+		$decoded_cookie = @unserialize ($_COOKIE[$bookmarks_cookie_name]);
+		if (is_array ($decoded_cookie))
+			$bookmarks = $decoded_cookie;
+	}
 
 	if ($action == 'bookmark')
 	{
@@ -414,6 +437,18 @@ display_debug(): void
 			echo '</PRE>';
 		}
 	}
+	echo '<h2>Volume groups</h2>';
+	foreach ($conf['volumegroups'] as $key => $value)
+	{
+		echo '<h3>Volumegroup ['.$key.']</h3>';
+		echo '<PRE>';
+		if ( array_key_exists ('label', $conf['volumegroups'][$key]))
+		{
+			echo "Label: " . $conf['volumegroups'][$key]['label'];
+			echo "\n";
+		}
+		echo '</PRE>';
+	}
 }
 
 //==============================================================
@@ -432,7 +467,19 @@ if ($action == 'upload')
 		]);
 		$status = 'NOK';
 	}
-	else
+
+	if ($status == 'OK')
+		if (!isset($_FILES["fileToUpload"]) || $_FILES["fileToUpload"]["error"] !== UPLOAD_ERR_OK)
+		{
+			$info -> set ([
+				'msg' => 'Upload failure or no file selected',
+				'level' => 'danger',
+				'feather' => 'alert-triangle'
+			]);
+			$status = 'NOK';
+		}
+
+	if ($status == 'OK')
 	{
 		$name = $_FILES["fileToUpload"]["name"];
 		$size = $_FILES["fileToUpload"]["size"];
@@ -447,33 +494,89 @@ if ($action == 'upload')
 			]);
 			$status = 'NOK';
 		}
-		else
-		{
-			$target_file = $path . '/' . $name;
+	}
 
-			if (@move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file))
+	if ($status == 'OK')
+		if (array_key_exists ('upload', $conf))
+		{
+			$log = new log($conf['log']['file'], format: $conf['log']['format'], tz: $conf['tz']);
+			if (array_key_exists ('whitelist', $conf['upload']))
 			{
-				$info -> set ([
-					'msg' => 'File successfuly uploaded',
-					'level' => 'success',
-					'feather' => 'check-circle'
-				]);
-				$status = 'OK';
+//if ($log != null)
+//$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'OK', 'username'=> $session->getLogin(), 'message' => 'ext=' . $ext . ', whitelist=' . implode(',',$conf['upload']['whitelist']) ]);
+				if (!in_array ($ext, $conf['upload']['whitelist']))
+				{
+					$info -> set ([
+						'msg' => 'Forbidden file extension',
+						'level' => 'warning',
+						'feather' => 'slash'
+					]);
+					$status = 'NOK';
+					if ($log != null)
+						$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'NOK', 'username'=> $session->getLogin(), 'message' => 'extension not found in whitelist ('.implode(',',$conf['upload']['whitelist']).')' ]);
+				}
+//else
+//if ($log != null)
+//$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'OK', 'username'=> $session->getLogin(), 'message' => 'whitelist: OK' ]);
 			}
 			else
 			{
-				// $_FILES["fileToUpload"]["error"] might contain an error number
-				// from 1 to 8, or zero
-				// for instance, attempting to override a file without appropriate perms will lead to code 0
-				$info -> set ([
-					'msg' => 'Upload failure',
-					'level' => 'danger',
-					'feather' => 'alert-triangle'
-				]);
-				$status = 'NOK';
+				//$log -> log([ 'action'=>$action, 'path'=>'', 'file'=>'', 'status'=>'OK', 'username'=> $session->getLogin(), 'message' => 'no whitelist' ]);
+				if (array_key_exists ('blacklist', $conf['upload']))
+				{
+					if ($log != null)
+						$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'OK', 'username'=> $session->getLogin(), 'message' => 'ext=' . $ext . ', blacklist=' . implode(',',$conf['upload']['blacklist'])  ]);
+					if (in_array ($ext, $conf['upload']['blacklist']))
+					{
+						$info -> set ([
+							'msg' => 'Forbidden file extension',
+							'level' => 'warning',
+							'feather' => 'slash'
+						]);
+						$status = 'NOK';
+						if ($log != null)
+							$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'NOK', 'username'=> $session->getLogin(), 'message' => 'extension found in blacklist ('.implode(',',$conf['upload']['blacklist']).')' ]);
+					}
+				}
+				//else
+				//$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'OK', 'username'=> $session->getLogin(), 'message' => 'no blacklist' ]);
 			}
 		}
+		//else
+			//$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'OK', 'username'=> $session->getLogin(), 'message' => 'no upload limit' ]);
+
+	if ($status == 'OK')
+	{
+		$target_file = $path . '/' . $name;
+
+		if (@move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file))
+		{
+			$info -> set ([
+				'msg' => 'File successfuly uploaded',
+				'level' => 'success',
+				'feather' => 'check-circle'
+			]);
+			$status = 'OK';
+			if ($log != null)
+				$log -> log([ 'action'=>'upload', 'path'=>$path, 'file'=>$name, 'status'=>'OK', 'username'=> $session->getLogin() ]);
+		}
+		else
+		{
+			// $_FILES["fileToUpload"]["error"] might contain an error number
+			// from 1 to 8, or zero
+			// for instance, attempting to override a file without appropriate perms will lead to code 0
+			$info -> set ([
+				'msg' => 'Upload failure',
+				'level' => 'danger',
+				'feather' => 'alert-triangle'
+			]);
+			$status = 'NOK';
+		}
 	}
+	else
+		unlink ($_FILES["fileToUpload"]["tmp_name"]);
+
+	$file = $name; // For final log
 }
 //==============================================================
 // Deletion confirmation
@@ -625,9 +728,16 @@ if ($action == 'download')
 
 		if ($type == 'file')
 		{
+			while (ob_get_level()) {
+				ob_end_clean();
+			}
+			header('Content-Description: File Transfer');
 			header('Content-Type: application/octet-stream');
 			header("Content-Transfer-Encoding: Binary"); 
 			header("Content-disposition: attachment; filename=\"" . $file . "\""); 
+			header('Expires: 0');
+			header('Cache-Control: must-revalidate');
+			header('Pragma: public');
 			header("Content-Length: " . $sz);
 			readfile($pathname); 
 
@@ -802,14 +912,6 @@ die();
 		$path = $p -> get_real_pathname($path);
 	}
 
-/*
-	if ($path == '')
-		$error -> set ([
-			'msg' => 'Cannot read directory', // use same message for non-exitent and unreadable
-			'level' => 'danger',
-			'feather' => 'alert-triangle'
-		]);
-*/
 	global $root;
 	$root = get_volume ($path);
 }
@@ -1069,7 +1171,16 @@ authenticate (): void
 	if (array_key_exists ('baseDN', $conf['ldap']))
 	{
 		$base_dn = $conf['ldap']['baseDN'];
-		$filter = "(sAMAccountName=$login)";
+		//$filter = "(sAMAccountName=$login)";
+
+		if (function_exists('ldap_escape')) {
+			$login_escaped = ldap_escape($login, "", LDAP_ESCAPE_FILTER);
+		} else {
+			// Callback de secours si l'extension n'est pas à jour, nettoyage manuel des caractères critiques LDAP
+			$login_escaped = str_replace(['\\', '*', '(', ')', "\0"], ['\\5c', '\\2a', '\\28', '\\29', '\\00'], $login);
+		}
+		$filter = "(sAMAccountName=$login_escaped)";
+
 		$ldap_search_result = @ldap_search($ldapconn, $base_dn, $filter, array("memberOf"));
 		if ($ldap_search_result === false)
 		{
@@ -2523,13 +2634,34 @@ send_html_head();
         <nav class="col-md-2 d-none d-md-block bg-light sidebar">
           <div class="sidebar-sticky">
 <?php echo $debugstr; ?>
-            <ul class="nav flex-column">
 
 <?php
+	// Display volumes
+
+	$volumegroup = '';
 	foreach ($conf['volumes'] as $volume)
 	{
 		if ($volume['allowed'] != 'yes')
 			continue;
+
+		if ($volume['volumegroup'] != $volumegroup)
+		{
+			if ($volumegroup != '')
+				echo "</ul></div>";
+			$volumegroup = $volume['volumegroup'];
+			$found = -1;
+			for ($i = 0; $i < count($conf['volumegroups']); $i++)
+				if ($conf['volumegroups'][$i]['name'] == $volumegroup)
+					$found = $i;
+			if ($found == -1)
+				$label = $volumegroup;
+			else
+				$label = $conf['volumegroups'][$found]['label'];
+			if ($volumegroup != '_default')
+				echo '<h5>' . $label . '</h5>';
+			echo '<div id="DIV-'.$volumegroup.'">';
+			echo '<ul class="nav flex-column">';
+		}
 
 		if (is_dir($volume['path']))
 		{
@@ -2556,6 +2688,8 @@ send_html_head();
 			echo '</a>';
 		echo '</li>';
 	}
+	if ($volumegroup != '')
+		echo "</ul></div>";
 ?>
 <?php
 	if ($conf['bookmarks']['enabled'] == 'yes')
