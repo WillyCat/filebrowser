@@ -1,5 +1,5 @@
 <?php
-declare(strict_types=0);
+declare(strict_types=1);
 // v1.52
 require_once 'classes/filename.class.php';
 require_once 'classes/message.class.php';
@@ -513,7 +513,7 @@ if ($action == 'upload')
 					]);
 					$status = 'NOK';
 					if ($log != null)
-						$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'NOK', 'username'=> $session->getLogin(), 'message' => 'extension not found in whitelist ('.implode(',',$conf['upload']['whitelist']).')' ]);
+						$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'NOK', 'username'=> $session->getLogin(), 'message' => 'extension not in whitelist ('.implode(',',$conf['upload']['whitelist']).')' ]);
 				}
 //else
 //if ($log != null)
@@ -535,7 +535,7 @@ if ($action == 'upload')
 						]);
 						$status = 'NOK';
 						if ($log != null)
-							$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'NOK', 'username'=> $session->getLogin(), 'message' => 'extension found in blacklist ('.implode(',',$conf['upload']['blacklist']).')' ]);
+							$log -> log([ 'action'=>$action, 'path'=>$path, 'file'=>$name, 'status'=>'NOK', 'username'=> $session->getLogin(), 'message' => 'extension in blacklist ('.implode(',',$conf['upload']['blacklist']).')' ]);
 					}
 				}
 				//else
@@ -945,6 +945,12 @@ is_valid_orderby (string $orderby): bool
 	return in_array ($orderby, [ 'name', 'size', 'mtime' ] );
 }
 
+function
+is_numeric_orderby (string $orderby): bool
+{
+	return in_array ($orderby, [ 'size', 'mtime' ] );
+}
+
 // true if this is a correct value for order
 function
 is_valid_order (string $order): bool
@@ -1223,7 +1229,10 @@ send_html_head(): void
 
     <title>File browsing '.$ver.'</title>
 
-<script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+<script
+  src="https://code.jquery.com/jquery-4.0.0.min.js"
+  integrity="sha256-OaVG6prZf4v69dPg6PhVattBXkcOWQB62pdZ3ORyrao="
+  crossorigin="anonymous"></script>
 
 <!--
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
@@ -1359,7 +1368,7 @@ get_dir_content (): void
 	//-------------------
 
 	global $nbpages;
-	$nbpages = floor ($n / $conf['display']['pagesize']);
+	$nbpages = (int)floor ($n / $conf['display']['pagesize']);
 	if ($n % $conf['display']['pagesize'])
 		$nbpages++;
 	if ($nbpages == 0)
@@ -1373,7 +1382,7 @@ get_dir_content (): void
 		global $orderby, $order;
 
 
-		if ($orderby == 'size')
+		if (is_numeric_orderby ($orderby))
 			$cr = $a[$orderby] - $b[$orderby];
 		else
 			$cr = strcasecmp($a[$orderby], $b[$orderby]);
@@ -2104,7 +2113,7 @@ make_link (array $parms, string $format='get', array $exclude = []): string
 		$urlparts = [ ];
 		foreach ($parms as $key => $value)
 			if (!in_array ($key, $exclude))
-				$urlparts[] = $key . '=' . rawurlencode ($parms[$key]);
+				$urlparts[] = $key . '=' . rawurlencode (strval($parms[$key]));
 
 		// paste parts together
 		$link = '?' . implode ('&', $urlparts);
@@ -2115,7 +2124,7 @@ make_link (array $parms, string $format='get', array $exclude = []): string
 		$urlparts = [ ];
 		foreach ($parms as $key => $value)
 			if (!in_array ($key, $exclude))
-				$urlparts[] = '<input type="hidden" name="' . $key . '" value="' . htmlspecialchars ($parms[$key]) . '">'; // NB : do not use rawurlencode()
+				$urlparts[] = '<input type="hidden" name="' . $key . '" value="' . htmlspecialchars (strval($parms[$key])) . '">'; // NB : do not use rawurlencode()
 		// paste parts together
 		$link = implode ("\n", $urlparts);
 		break;
